@@ -15,11 +15,15 @@ Get a free TMDB API key at: https://www.themoviedb.org/settings/api
 """
 
 import os
+import urllib3
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
+
+# Suppress SSL warnings (fix for SSL connection issue on some Windows machines)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Load variables from .env file (if it exists)
 load_dotenv()
@@ -34,6 +38,7 @@ retry_strategy = Retry(
     status_forcelist=[429, 500, 502, 503, 504],
 )
 TMDB_SESSION.mount("https://", HTTPAdapter(max_retries=retry_strategy))
+TMDB_SESSION.verify = False  # Fix for SSL connection reset error on Windows
 TMDB_SESSION.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 })
@@ -62,7 +67,7 @@ GENRE_MAP = {
     36: "History", 27: "Horror", 10402: "Music",
     9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
     10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
-    16: "Animation",  35: "Comedy",  10759: "Anime"  # 10759 is not official, but 16 is Animation (used for anime)
+    10759: "Anime"
 }
 
 # Mood → list of TMDB genre IDs
