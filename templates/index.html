@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DannyMood – Movie Recommender</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ════════════════════════════════════════
+       NAVBAR
+       ════════════════════════════════════════ -->
+  <nav class="navbar" role="navigation" aria-label="Main navigation">
+    <div class="navbar__inner">
+
+      <!-- Logo (click to go home) -->
+      <span id="logo" role="link" tabindex="0" aria-label="DannyMood home">DannyMood</span>
+
+      <!-- Search bar -->
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">🔍</span>
+        <input
+          type="search"
+          id="search-input"
+          placeholder="Search movies, moods, or genres..."
+          autocomplete="off"
+          aria-label="Search movies"
+        />
+      </div>
+
+    </div>
+  </nav>
+
+
+  <!-- ════════════════════════════════════════
+       MAIN PAGE CONTENT
+       ════════════════════════════════════════ -->
+  <main>
+
+    <!-- Demo Data Banner (shown when API key is not set) -->
+    <div id="demo-banner" style="display: none;">
+      <div class="demo-banner__inner">
+        <div>
+          <strong>Showing Demo Data</strong>
+          <p>Set your TMDB API key in app.py to see live movies.</p>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ── HOME VIEW ───────────────────────────
+         Shown by default. Hidden during search.
+    ───────────────────────────────────────────── -->
+    <div id="home-view">
+
+      <!-- HERO SECTION: Big featured movie banner -->
+      <section class="hero" id="hero-section" aria-label="Featured movie">
+
+        <!-- Background image (filled by JavaScript) -->
+        <img class="hero__bg" id="hero-bg" src="" alt="Featured movie backdrop" />
+
+        <!-- Gradient overlays for readability -->
+        <div class="hero__gradient-side"   aria-hidden="true"></div>
+        <div class="hero__gradient-bottom" aria-hidden="true"></div>
+
+        <!-- Movie info text -->
+        <div class="hero__content">
+          <div class="hero__info">
+            <span class="hero__label">FEATURED</span>
+            <h1 id="hero-title">Loading...</h1>
+            <p  id="hero-summary"></p>
+
+            <div class="hero__buttons">
+              <button class="btn-gold" id="hero-explore-btn">
+                ▶ Explore
+              </button>
+              <button class="btn-ghost" onclick="document.getElementById('mood-chips').scrollIntoView({behavior:'smooth'})">
+                ✨ Browse Moods
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- MOOD SELECTOR: Pick a mood to filter movies -->
+      <section class="mood-section" aria-label="Filter by mood">
+        <h2 class="section-title">How are you feeling?</h2>
+        <!-- Mood chips are rendered here by main.js -->
+        <div id="mood-chips" role="group" aria-label="Mood filters"></div>
+      </section>
+
+
+      <!-- MOVIE ROWS: Trending, Popular, Top Picks -->
+      <!-- Filled dynamically by main.js -->
+      <div id="rows-container" aria-live="polite"></div>
+
+    </div><!-- end #home-view -->
+
+
+    <!-- ── SEARCH VIEW ──────────────────────────
+         Shown when user types in the search bar.
+    ───────────────────────────────────────────── -->
+    <div id="search-view" aria-live="polite">
+
+      <div class="search-view__header">
+        <!-- Back button: returns to the homepage -->
+        <button id="back-btn" aria-label="Back to home">
+          ← Back to Home
+        </button>
+        <h2 id="search-title"></h2>
+      </div>
+
+      <!-- Search results grid (filled by main.js) -->
+      <div id="search-results"></div>
+
+    </div><!-- end #search-view -->
+
+  </main>
+
+
+  <!-- ════════════════════════════════════════
+       MOVIE DETAIL MODAL
+       Hidden by default. Opens when you click a movie card.
+       ════════════════════════════════════════ -->
+  <div
+    id="movie-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modal-title"
+  >
+    <div class="modal__box">
+
+      <!-- Movie backdrop image at the top -->
+      <div class="modal__backdrop">
+        <img id="modal-bg" src="" alt="Movie backdrop" />
+        <div class="modal__backdrop-gradient" aria-hidden="true"></div>
+      </div>
+
+      <!-- Close (X) button -->
+      <button id="modal-close-btn" aria-label="Close modal">✕</button>
+
+      <!-- Modal body: movie info + trailer -->
+      <div class="modal__body">
+
+        <!-- Meta row: year, genre, rating badge, vote score -->
+        <div class="modal__meta">
+          <span class="meta-tag" id="modal-year"></span>
+          <span class="meta-tag" id="modal-genre"></span>
+          <span id="modal-rating"></span>
+          <span id="modal-vote"></span>
+        </div>
+
+        <!-- Movie title -->
+        <h2 id="modal-title"></h2>
+
+        <!-- Summary / overview -->
+        <p id="modal-summary"></p>
+
+        <!-- Mood tags -->
+        <div id="modal-mood" aria-label="Movie moods"></div>
+
+        <!-- YouTube trailer embed -->
+        <div id="trailer-area" aria-label="Movie trailer"></div>
+
+      </div><!-- end modal__body -->
+
+    </div><!-- end modal__box -->
+  </div><!-- end #movie-modal -->
+
+
+  <!-- ════════════════════════════════════════
+       JAVASCRIPT
+       ════════════════════════════════════════ -->
+  <script src="/static/js/main.js"></script>
+
+</body>
+</html>
