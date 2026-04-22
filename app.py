@@ -48,10 +48,11 @@ TMDB_SESSION.headers.update({
 # ─────────────────────────────────────────────
 
 # Get TMDB API key from environment variable only (do not hardcode in code)
-TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
 if not TMDB_API_KEY:
-    raise RuntimeError("TMDB_API_KEY not set. Please add it to your .env file or environment variables.")
+    import warnings
+    warnings.warn("TMDB_API_KEY not set. Movie API features will not work. Please set TMDB_API_KEY in your environment variables (see README). App will still start for local development.")
 
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
