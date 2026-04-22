@@ -66,8 +66,7 @@ GENRE_MAP = {
     18: "Drama", 10751: "Family", 14: "Fantasy",
     36: "History", 27: "Horror", 10402: "Music",
     9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
-    10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
-    10759: "Anime"
+    10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western"
 }
 
 # Mood → list of TMDB genre IDs
@@ -77,7 +76,6 @@ MOOD_TO_GENRES = {
     "Thriller":     [53, 27, 80],       # Thriller, Horror, Crime
     "Feel-good":    [35, 10751, 16],    # Comedy, Family, Animation
     "Mind-blowing": [878, 9648, 14],    # Sci-Fi, Mystery, Fantasy
-    "Anime":        [16],               # Animation (used for anime)
 }
 
 # ─────────────────────────────────────────────
@@ -91,27 +89,7 @@ DEMO_MOVIES = [
         "rating": "perfection", "mood": ["Thriller", "Mind-blowing"],
         "year": "2025", "genre": "Psychological Thriller", "vote_average": 8.5,
     },
-    {
-        "id": "anime-1", "title": "Spirited Away",
-        "image": "https://image.tmdb.org/t/p/w500/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg",
-        "summary": "A young girl enters a world of spirits and must find her way back.",
-        "rating": "perfection", "mood": ["Anime", "Mind-blowing", "Feel-good"],
-        "year": "2001", "genre": "Animation/Adventure/Family", "vote_average": 8.6,
-    },
-    {
-        "id": "anime-2", "title": "Your Name",
-        "image": "https://image.tmdb.org/t/p/w500/q719jXXEzOoYaps6babgKnONONX.jpg",
-        "summary": "Two teenagers share a profound, magical connection upon discovering they are swapping bodies.",
-        "rating": "perfection", "mood": ["Anime", "Romantic", "Mind-blowing"],
-        "year": "2016", "genre": "Animation/Drama/Fantasy", "vote_average": 8.5,
-    },
-    {
-        "id": "anime-3", "title": "A Silent Voice",
-        "image": "https://image.tmdb.org/t/p/w500/nDP33LmQwNsnPv29GQazz59HjJI.jpg",
-        "summary": "A former class bully reaches out to the deaf girl he tormented in grade school.",
-        "rating": "go-for-it", "mood": ["Anime", "Sad", "Feel-good"],
-        "year": "2016", "genre": "Animation/Drama/Romance", "vote_average": 8.2,
-    },
+
     {
         "id": "demo-2", "title": "Crimson Horizon",
         "image": "https://images.unsplash.com/photo-1771777138502-a0e75dce9101?w=500",
@@ -161,41 +139,7 @@ DEMO_MOVIES = [
         "rating": "go-for-it", "mood": ["Feel-good", "Sad"],
         "year": "2007", "genre": "Drama/Family", "vote_average": 8.2,
     },
-    {
-        "id": "anime-4", "title": "Death Note",
-        "image": "https://image.tmdb.org/t/p/w500/mggv9zSKnJMZHl50DXuAANtD6S.jpg",
-        "summary": "An intelligent high schooler discovers a mysterious notebook that can make any person whose name is written on it die.",
-        "rating": "perfection", "mood": ["Anime", "Thriller", "Mind-blowing"],
-        "year": "2006", "genre": "Animation/Drama/Thriller", "vote_average": 8.7,
-    },
-    {
-        "id": "anime-5", "title": "Demon Slayer",
-        "image": "https://image.tmdb.org/t/p/w500/mPJ0j00H0CwsSMNERXz5OdxjDIH.jpg",
-        "summary": "A young demon slayer embarks on a quest to cure his sister who has been transformed into a demon.",
-        "rating": "perfection", "mood": ["Anime", "Mind-blowing", "Feel-good"],
-        "year": "2019", "genre": "Animation/Action/Adventure", "vote_average": 8.5,
-    },
-    {
-        "id": "anime-6", "title": "Steins;Gate",
-        "image": "https://image.tmdb.org/t/p/w500/sxR8W1rjBb0d43V0iKkfPxYFHwC.jpg",
-        "summary": "A group of friends discover they can send messages to the past, and must prevent a catastrophic future.",
-        "rating": "perfection", "mood": ["Anime", "Mind-blowing", "Thriller"],
-        "year": "2011", "genre": "Animation/Drama/Sci-Fi", "vote_average": 9.0,
-    },
-    {
-        "id": "anime-7", "title": "Jujutsu Kaisen",
-        "image": "https://image.tmdb.org/t/p/w500/D41qJi2aX3JdH1FLU8j0fgKxg9w.jpg",
-        "summary": "A high school boy swallows a cursed finger and joins a secret organization of jujutsu sorcerers.",
-        "rating": "go-for-it", "mood": ["Anime", "Mind-blowing", "Thriller"],
-        "year": "2020", "genre": "Animation/Action/Drama", "vote_average": 8.6,
-    },
-    {
-        "id": "anime-8", "title": "Attack on Titan",
-        "image": "https://image.tmdb.org/t/p/w500/hTP3dSMffxDKSVr2XV6Yvr4j3Zw.jpg",
-        "summary": "Humanity fights for survival against giant humanoid creatures that suddenly appear and begin devouring people.",
-        "rating": "perfection", "mood": ["Anime", "Thriller", "Mind-blowing"],
-        "year": "2013", "genre": "Animation/Action/Adventure", "vote_average": 8.8,
-    },
+
 ]
 
 
@@ -410,20 +354,33 @@ def search_movies():
     if not query:
         return jsonify({"movies": [], "error": "No search query provided"})
 
-    movies = fetch_from_tmdb("/search/movie", params={"query": query})
+    if TMDB_API_KEY:
+        # Try to fetch from TMDB
+        url = f"{TMDB_BASE_URL}/search/movie"
+        all_params = {"api_key": TMDB_API_KEY, "language": "en-US", "query": query}
 
-    if not movies:
-        # Simple fallback: search through demo data
-        query_lower = query.lower()
-        results = [
-            m for m in DEMO_MOVIES
-            if query_lower in m["title"].lower()
-            or query_lower in m["genre"].lower()
-            or any(query_lower in mood.lower() for mood in m["mood"])
-        ]
-        return jsonify({"movies": results, "source": "demo"})
+        try:
+            response = TMDB_SESSION.get(url, params=all_params, timeout=8)
+            response.raise_for_status()
+            data = response.json()
+            movies = data.get("results", [])
+            
+            # For search results, be less strict - include movies without poster_path
+            # since they might still have backdrop or other images
+            if movies:
+                return jsonify({"movies": [transform_movie(m) for m in movies[:20]], "source": "tmdb"})
+        except Exception as e:
+            print(f"Search API error: {e}")
 
-    return jsonify({"movies": movies, "source": "tmdb"})
+    # Fallback: search through demo data
+    query_lower = query.lower()
+    results = [
+        m for m in DEMO_MOVIES
+        if query_lower in m["title"].lower()
+        or query_lower in m["genre"].lower()
+        or any(query_lower in mood.lower() for mood in m["mood"])
+    ]
+    return jsonify({"movies": results, "source": "demo"})
 
 
 @app.route("/api/mood")
@@ -458,27 +415,7 @@ def get_movies_by_mood():
     return jsonify({"movies": movies, "source": "tmdb"})
 
 
-@app.route("/api/anime")
-def get_anime():
-    """
-    Return anime movies and shows from TMDB (using Animation genre).
-    Falls back to demo anime data if TMDB request fails.
-    """
-    movies = fetch_from_tmdb(
-        "/discover/movie",
-        params={
-            "with_genres": 16,  # 16 = Animation genre
-            "sort_by": "popularity.desc",
-            "vote_count.gte": 100,
-        }
-    )
 
-    if not movies:
-        # Fallback: filter demo data for anime
-        anime_results = [m for m in DEMO_MOVIES if "Anime" in m["mood"]]
-        return jsonify({"movies": anime_results, "source": "demo"})
-
-    return jsonify({"movies": movies, "source": "tmdb"})
 
 
 @app.route("/api/movie/<int:movie_id>/trailer")

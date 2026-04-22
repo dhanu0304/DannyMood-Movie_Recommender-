@@ -31,7 +31,6 @@ const MOODS = [
   { label: "Thriller",     emoji: "🔪" },
   { label: "Feel-good",    emoji: "✨" },
   { label: "Mind-blowing", emoji: "🤯" },
-  { label: "Anime",        emoji: "🎨" },
 ];
 
 // Rating label and color for each rating type
@@ -82,10 +81,6 @@ async function fetchIndianMovies() {
   return fetchFromAPI("/api/indian");
 }
 
-/** Fetch anime movies */
-async function fetchAnime() {
-  return fetchFromAPI("/api/anime");
-}
 
 /** Fetch movies by mood (e.g. "Thriller") */
 async function fetchByMood(mood) {
@@ -224,7 +219,7 @@ function renderHero(movie) {
 /** Show the homepage (hero + mood chips + movie rows) */
 function showHomeView() {
   state.currentView = "home";
-  document.getElementById("home-view").style.display    = "";
+  document.getElementById("home-view").style.display    = "grid";
   document.getElementById("search-view").style.display  = "none";
   document.getElementById("search-input").value         = "";
   state.searchQuery = "";
@@ -234,7 +229,7 @@ function showHomeView() {
 function showSearchView(query) {
   state.currentView = "search";
   document.getElementById("home-view").style.display    = "none";
-  document.getElementById("search-view").style.display  = "";
+  document.getElementById("search-view").style.display  = "block";
   document.getElementById("search-title").textContent   = `Results for "${query}"`;
 }
 
@@ -248,19 +243,17 @@ async function loadHomepage() {
   showLoadingInSection("rows-container", "Loading movies...");
 
   // Fetch all three sections at the same time (faster than one-by-one)
-  const [trendingData, popularData, topRatedData, indianData, animeData] = await Promise.all([
+  const [trendingData, popularData, topRatedData, indianData] = await Promise.all([
     fetchTrending(),
     fetchPopular(),
     fetchTopRated(),
     fetchIndianMovies(),
-    fetchAnime(),
   ]);
 
   const trending = trendingData?.movies || [];
   const popular  = popularData?.movies  || [];
   const topRated = topRatedData?.movies || [];
   const indian   = indianData?.movies  || [];
-  const anime    = animeData?.movies    || [];
 
   // Show the first trending movie in the hero section
   if (trending.length > 0) {
@@ -275,8 +268,7 @@ async function loadHomepage() {
   const rowsHTML =
     createMovieRow("🔥 Trending Now", trending.slice(0, 10)) +
     createMovieRow("🎬 Popular This Week", popular.slice(0, 10)) +
-    createMovieRow("🎨 Anime", anime.slice(0, 10)) +
-    createMovieRow("🇮🇳 Indian Picks", indian.slice(0, 10)) +
+    createMovieRow("🇳 Indian Picks", indian.slice(0, 10)) +
     createMovieRow("⭐ Top Picks", topRated.slice(0, 10));
 
   document.getElementById("rows-container").innerHTML = rowsHTML || "<p class='no-results'>Could not load movies.</p>";
@@ -296,7 +288,7 @@ async function loadMoodMovies(mood) {
   const data = await fetchByMood(mood);
   const movies = data?.movies || [];
 
-  const moodEmojis = { "Sad": "😢", "Romantic": "❤️", "Thriller": "🔪", "Feel-good": "✨", "Mind-blowing": "🤯", "Anime": "🎨" };
+  const moodEmojis = { "Sad": "😢", "Romantic": "❤️", "Thriller": "🔪", "Feel-good": "✨", "Mind-blowing": "🤯" };
   const emoji = moodEmojis[mood] || "🎬";
 
   container.innerHTML = createMovieRow(`${emoji} ${mood} Movies`, movies);
