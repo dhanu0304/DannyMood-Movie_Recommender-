@@ -95,6 +95,10 @@ DEMO_MOVIES = [
             {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
             {"name": "Tubi", "logo": "https://cdn.simpleicons.org/tubi/7408FF", "type": "free"},
         ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
+        ],
     },
 
     {
@@ -107,6 +111,10 @@ DEMO_MOVIES = [
             {"name": "JioCinema", "logo": "https://cdn.simpleicons.org/jio/0A2885", "type": "ads"},
             {"name": "ZEE5", "logo": "https://cdn.simpleicons.org/zee5/8230C6", "type": "subscription"},
         ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
+        ],
     },
     {
         "id": "demo-3", "title": "Neon Dreams",
@@ -118,6 +126,10 @@ DEMO_MOVIES = [
             {"name": "Apple TV", "logo": "https://cdn.simpleicons.org/appletv/FFFFFF", "type": "rent"},
             {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
         ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
+        ],
     },
     {
         "id": "demo-4", "title": "Electric Hearts",
@@ -127,6 +139,10 @@ DEMO_MOVIES = [
         "year": "2025", "genre": "Musical/Romance", "vote_average": 8.1,
         "ott_platforms": [
             {"name": "Disney+ Hotstar", "logo": "https://cdn.simpleicons.org/disneyplus/02D6E8", "type": "subscription"},
+        ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
         ],
     },
     {
@@ -139,6 +155,10 @@ DEMO_MOVIES = [
             {"name": "SonyLIV", "logo": "https://cdn.simpleicons.org/sony/FFFFFF", "type": "subscription"},
             {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
         ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
+        ],
     },
     {
         "id": "demo-6", "title": "Blue & Red",
@@ -149,6 +169,10 @@ DEMO_MOVIES = [
         "ott_platforms": [
             {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
             {"name": "Plex", "logo": "https://cdn.simpleicons.org/plex/EBAF00", "type": "free"},
+        ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
         ],
     },
     {
@@ -161,6 +185,10 @@ DEMO_MOVIES = [
             {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
             {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
         ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
+        ],
     },
     {
         "id": "demo-8", "title": "Taare Zameen Par",
@@ -171,6 +199,10 @@ DEMO_MOVIES = [
         "ott_platforms": [
             {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
             {"name": "YouTube", "logo": "https://cdn.simpleicons.org/youtube/FF0000", "type": "buy"},
+        ],
+        "websites": [
+            {"name": "Net20", "url": "https://net20.cc/home"},
+            {"name": "Cinebto", "url": "https://cinebto.com/"}
         ],
     },
 

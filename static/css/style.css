@@ -1,3 +1,29 @@
+/* ─── OTT WEBSITES (custom links) ───────────────────────────── */
+.ott-websites {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ott-website-link {
+  display: inline-block;
+  background: var(--surface-2);
+  color: var(--gold);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35em 1em;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: background 0.2s, color 0.2s, border 0.2s;
+  margin-bottom: 0.25em;
+}
+.ott-website-link:hover {
+  background: var(--gold);
+  color: var(--bg);
+  border-color: var(--gold);
+  text-decoration: underline;
+}
 /* ===================================================
    DannyMood - Stylesheet
    Dark Netflix-style UI with gold accents

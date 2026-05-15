@@ -521,6 +521,15 @@ function renderOttPlatforms(platforms, isLoading = false) {
   const modalOtt = document.getElementById("modal-ott");
   if (!modalOtt) return;
 
+  // Get the current movie from the modal (by title)
+  let movie = null;
+  const modalTitle = document.getElementById("modal-title");
+  if (modalTitle) {
+    const title = modalTitle.textContent;
+    // Try to find the movie in state.moviesByCardKey
+    movie = Object.values(state.moviesByCardKey).find(m => m.title === title);
+  }
+
   if (isLoading) {
     modalOtt.innerHTML = `
       <h3>Available on</h3>
@@ -531,13 +540,51 @@ function renderOttPlatforms(platforms, isLoading = false) {
 
   const normalizedPlatforms = normalizePlatforms(platforms);
 
+  let ottHtml = "";
   if (normalizedPlatforms.length === 0) {
-    modalOtt.innerHTML = `
+    ottHtml = `
       <h3>Available on</h3>
       <p class="ott-muted">No OTT platform listed right now.</p>
     `;
-    return;
+  } else {
+    const freePlatforms = normalizedPlatforms.filter(platform => ["free", "ads"].includes(platform.type));
+    const paidPlatforms = normalizedPlatforms.filter(platform => !["free", "ads"].includes(platform.type));
+
+    ottHtml = `
+      ${freePlatforms.length ? `
+        <div class="ott-group">
+          <h3>Watch free legally</h3>
+          <div class="ott-platforms">
+            ${freePlatforms.map(createOttPill).join("")}
+          </div>
+        </div>
+      ` : ""}
+      ${paidPlatforms.length ? `
+        <div class="ott-group">
+          <h3>Available on</h3>
+          <div class="ott-platforms">
+            ${paidPlatforms.map(createOttPill).join("")}
+          </div>
+        </div>
+      ` : ""}
+    `;
   }
+
+  // Add custom websites section if available
+  let websitesHtml = "";
+  if (movie && Array.isArray(movie.websites) && movie.websites.length > 0) {
+    websitesHtml = `
+      <div class="ott-group">
+        <h3>Also try these sites</h3>
+        <div class="ott-websites">
+          ${movie.websites.map(site => `<a href="${escapeHTML(site.url)}" target="_blank" rel="noopener" class="ott-website-link">${escapeHTML(site.name)}</a>`).join(" ")}
+        </div>
+      </div>
+    `;
+  }
+
+  modalOtt.innerHTML = ottHtml + websitesHtml;
+}
 
   const freePlatforms = normalizedPlatforms.filter(platform => ["free", "ads"].includes(platform.type));
   const paidPlatforms = normalizedPlatforms.filter(platform => !["free", "ads"].includes(platform.type));
