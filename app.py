@@ -57,6 +57,7 @@ if not TMDB_API_KEY:
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 TMDB_IMAGE_ORIGINAL = "https://image.tmdb.org/t/p/original"
+TMDB_PROVIDER_LOGO_BASE = "https://image.tmdb.org/t/p/original"
 
 # ─────────────────────────────────────────────
 # GENRE MAP: TMDB genre ID → genre name
@@ -89,6 +90,11 @@ DEMO_MOVIES = [
         "summary": "A psychological thriller that explores the depths of human consciousness.",
         "rating": "perfection", "mood": ["Thriller", "Mind-blowing"],
         "year": "2025", "genre": "Psychological Thriller", "vote_average": 8.5,
+        "ott_platforms": [
+            {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
+            {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
+            {"name": "Tubi", "logo": "https://cdn.simpleicons.org/tubi/7408FF", "type": "free"},
+        ],
     },
 
     {
@@ -97,6 +103,10 @@ DEMO_MOVIES = [
         "summary": "Two souls find each other at the edge of the world.",
         "rating": "go-for-it", "mood": ["Romantic", "Feel-good"],
         "year": "2024", "genre": "Romance/Drama", "vote_average": 7.2,
+        "ott_platforms": [
+            {"name": "JioCinema", "logo": "https://cdn.simpleicons.org/jio/0A2885", "type": "ads"},
+            {"name": "ZEE5", "logo": "https://cdn.simpleicons.org/zee5/8230C6", "type": "subscription"},
+        ],
     },
     {
         "id": "demo-3", "title": "Neon Dreams",
@@ -104,6 +114,10 @@ DEMO_MOVIES = [
         "summary": "In a cyberpunk metropolis, a hacker discovers a conspiracy that could change everything.",
         "rating": "go-for-it", "mood": ["Thriller", "Mind-blowing"],
         "year": "2025", "genre": "Sci-Fi/Thriller", "vote_average": 7.8,
+        "ott_platforms": [
+            {"name": "Apple TV", "logo": "https://cdn.simpleicons.org/appletv/FFFFFF", "type": "rent"},
+            {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
+        ],
     },
     {
         "id": "demo-4", "title": "Electric Hearts",
@@ -111,6 +125,9 @@ DEMO_MOVIES = [
         "summary": "A vibrant musical journey through love and self-discovery.",
         "rating": "perfection", "mood": ["Feel-good", "Romantic"],
         "year": "2025", "genre": "Musical/Romance", "vote_average": 8.1,
+        "ott_platforms": [
+            {"name": "Disney+ Hotstar", "logo": "https://cdn.simpleicons.org/disneyplus/02D6E8", "type": "subscription"},
+        ],
     },
     {
         "id": "demo-5", "title": "The Vanishing",
@@ -118,6 +135,10 @@ DEMO_MOVIES = [
         "summary": "When people start disappearing without a trace, one investigator races against time.",
         "rating": "perfection", "mood": ["Thriller"],
         "year": "2025", "genre": "Thriller/Mystery", "vote_average": 8.3,
+        "ott_platforms": [
+            {"name": "SonyLIV", "logo": "https://cdn.simpleicons.org/sony/FFFFFF", "type": "subscription"},
+            {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
+        ],
     },
     {
         "id": "demo-6", "title": "Blue & Red",
@@ -125,6 +146,10 @@ DEMO_MOVIES = [
         "summary": "A mind-bending exploration of duality and identity.",
         "rating": "perfection", "mood": ["Mind-blowing", "Thriller"],
         "year": "2025", "genre": "Psychological/Sci-Fi", "vote_average": 8.7,
+        "ott_platforms": [
+            {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
+            {"name": "Plex", "logo": "https://cdn.simpleicons.org/plex/EBAF00", "type": "free"},
+        ],
     },
     {
         "id": "demo-7", "title": "3 Idiots",
@@ -132,6 +157,10 @@ DEMO_MOVIES = [
         "summary": "Three engineering students navigate friendship, pressure, and the meaning of success.",
         "rating": "perfection", "mood": ["Feel-good", "Romantic"],
         "year": "2009", "genre": "Comedy/Drama", "vote_average": 8.4,
+        "ott_platforms": [
+            {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
+            {"name": "Prime Video", "logo": "https://cdn.simpleicons.org/amazonprime/00A8E1", "type": "subscription"},
+        ],
     },
     {
         "id": "demo-8", "title": "Taare Zameen Par",
@@ -139,6 +168,10 @@ DEMO_MOVIES = [
         "summary": "A gifted child struggles in school until an art teacher helps him discover his true self.",
         "rating": "go-for-it", "mood": ["Feel-good", "Sad"],
         "year": "2007", "genre": "Drama/Family", "vote_average": 8.2,
+        "ott_platforms": [
+            {"name": "Netflix", "logo": "https://cdn.simpleicons.org/netflix/E50914", "type": "subscription"},
+            {"name": "YouTube", "logo": "https://cdn.simpleicons.org/youtube/FF0000", "type": "buy"},
+        ],
     },
 
 ]
@@ -220,7 +253,54 @@ def transform_movie(movie):
         "mood": get_moods_from_genres(genre_ids),
         "year": (movie.get("release_date") or "2024")[:4],  # Get just the year
         "genre": genre_names,
+        "ott_platforms": [],
     }
+
+
+def get_watch_providers_for_movie(movie_id, region="IN"):
+    """
+    Fetch OTT/watch provider names for a movie.
+    TMDB groups providers by country, so we prefer India and fall back to the US.
+    """
+    if not TMDB_API_KEY or not movie_id:
+        return []
+
+    url = f"{TMDB_BASE_URL}/movie/{movie_id}/watch/providers"
+    params = {"api_key": TMDB_API_KEY}
+
+    try:
+        response = TMDB_SESSION.get(url, params=params, timeout=8)
+        response.raise_for_status()
+        results = response.json().get("results", {})
+        country_data = results.get(region) or results.get("US") or {}
+        providers = []
+        seen_names = set()
+
+        provider_type_labels = {
+            "flatrate": "subscription",
+            "free": "free",
+            "ads": "ads",
+            "rent": "rent",
+            "buy": "buy",
+        }
+
+        for provider_type in ("free", "ads", "flatrate", "rent", "buy"):
+            for provider in country_data.get(provider_type, []):
+                name = provider.get("provider_name")
+                logo_path = provider.get("logo_path")
+                if name and name not in seen_names:
+                    seen_names.add(name)
+                    providers.append({
+                        "name": name,
+                        "logo": f"{TMDB_PROVIDER_LOGO_BASE}{logo_path}" if logo_path else "",
+                        "type": provider_type_labels[provider_type],
+                    })
+
+        return providers[:8]
+
+    except requests.exceptions.RequestException as e:
+        print(f"Watch providers fetch error: {e}")
+        return []
 
 
 def fetch_from_tmdb(endpoint, params=None):
@@ -456,6 +536,17 @@ def get_trailer(movie_id):
     except Exception as e:
         print(f"Trailer fetch error: {e}")
         return jsonify({"trailer_key": None})
+
+
+@app.route("/api/movie/<int:movie_id>/watch-providers")
+def get_watch_providers(movie_id):
+    """
+    Get OTT platforms where a movie is available.
+    Returns: { "ott_platforms": [{ "name": "Netflix", "logo": "..." }] }
+    """
+    region = request.args.get("region", "IN").strip().upper() or "IN"
+    platforms = get_watch_providers_for_movie(movie_id, region=region)
+    return jsonify({"ott_platforms": platforms})
 
 
 # ─────────────────────────────────────────────

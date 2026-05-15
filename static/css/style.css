@@ -602,6 +602,84 @@ main { padding-top: 70px; }
   color: var(--text-muted);
 }
 
+/* OTT availability */
+#modal-ott {
+  margin-bottom: 24px;
+}
+
+.ott-group + .ott-group {
+  margin-top: 18px;
+}
+
+#modal-ott h3 {
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.ott-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ott-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(212,175,55,.25);
+  background: rgba(212,175,55,.08);
+  color: var(--text);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.ott-pill__text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.2;
+}
+
+.ott-pill__text small {
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 500;
+}
+
+.ott-pill img,
+.ott-fallback {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.95);
+}
+
+.ott-pill img {
+  object-fit: contain;
+  padding: 2px;
+}
+
+.ott-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg);
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.ott-muted {
+  color: var(--text-muted);
+  font-size: .88rem;
+}
+
 /* Trailer area */
 #trailer-area {
   border-radius: 10px;

@@ -18,6 +18,7 @@ const state = {
   selectedMood: "",       // Which mood chip is active
   searchQuery: "",        // Current search text
   heroMovie: null,        // The big featured movie at the top
+  moviesByCardKey: {},    // Full movie data for rendered cards
 };
 
 
@@ -40,6 +41,49 @@ const RATING_CONFIG = {
   "timepass":   { label: "Timepass",   color: "#F1C40F" },
   "skip":       { label: "Skip",       color: "#E63946" },
 };
+
+function escapeHTML(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function normalizePlatforms(platforms) {
+  if (!platforms) return [];
+  if (typeof platforms === "string") {
+    return platforms
+      .split(",")
+      .filter(Boolean)
+      .map(name => ({ name: name.trim(), logo: "" }));
+  }
+
+  return platforms
+    .filter(Boolean)
+    .map(platform => {
+      if (typeof platform === "string") {
+        return { name: platform.trim(), logo: "" };
+      }
+      return {
+        name: platform.name || "",
+        logo: platform.logo || "",
+        type: platform.type || "subscription",
+      };
+    })
+    .filter(platform => platform.name);
+}
+
+function parsePlatforms(value) {
+  if (!value) return [];
+
+  try {
+    return normalizePlatforms(JSON.parse(value));
+  } catch (error) {
+    return normalizePlatforms(value);
+  }
+}
 
 
 // ─────────────────────────────────────────────
@@ -100,6 +144,13 @@ async function fetchTrailer(movieId) {
   return data ? data.trailer_key : null;
 }
 
+/** Get OTT platforms for a movie */
+async function fetchWatchProviders(movieId) {
+  if (String(movieId).startsWith("demo")) return [];
+  const data = await fetchFromAPI(`/api/movie/${movieId}/watch-providers?region=IN`);
+  return data?.ott_platforms || [];
+}
+
 
 // ─────────────────────────────────────────────
 // BUILDING HTML ELEMENTS
@@ -120,10 +171,17 @@ function createMovieCard(movie) {
   const safeId      = String(movie.id || "");
   const safeRating  = movie.rating || "timepass";
   const safeMoods   = (movie.mood || []).join(",");
+  const cardKey = `${safeId}-${Object.keys(state.moviesByCardKey).length}`;
+
+  state.moviesByCardKey[cardKey] = {
+    ...movie,
+    ott_platforms: normalizePlatforms(movie.ott_platforms),
+  };
 
   return `
     <div
       class="movie-card"
+      data-card-key="${cardKey}"
       data-id="${safeId}"
       data-title="${safeTitle}"
       data-summary="${safeSummary}"
@@ -240,6 +298,7 @@ function showSearchView(query) {
 // ─────────────────────────────────────────────
 
 async function loadHomepage() {
+  state.moviesByCardKey = {};
   showLoadingInSection("rows-container", "Loading movies...");
 
   // Fetch all three sections at the same time (faster than one-by-one)
@@ -283,6 +342,7 @@ async function loadHomepage() {
  */
 async function loadMoodMovies(mood) {
   const container = document.getElementById("rows-container");
+  state.moviesByCardKey = {};
   showLoadingInSection("rows-container", `Loading ${mood} movies...`);
 
   const data = await fetchByMood(mood);
@@ -379,6 +439,7 @@ function setupSearch() {
 
 async function runSearch(query) {
   state.searchQuery = query;
+  state.moviesByCardKey = {};
   showSearchView(query);
   showLoadingInSection("search-results", "Searching...");
 
@@ -405,6 +466,7 @@ function openModal(movie) {
   const modalMood    = document.getElementById("modal-mood");
   const modalSummary = document.getElementById("modal-summary");
   const modalVote    = document.getElementById("modal-vote");
+  const modalOtt     = document.getElementById("modal-ott");
   const trailerArea  = document.getElementById("trailer-area");
 
   // Fill in the movie details
@@ -437,6 +499,10 @@ function openModal(movie) {
       : "";
   }
 
+  if (modalOtt) {
+    renderOttPlatforms(normalizePlatforms(movie.ott_platforms), false);
+  }
+
   // Clear trailer area and show loading
   if (trailerArea) {
     trailerArea.innerHTML = `<div class="trailer-loading"><div class="spinner"></div><p>Loading trailer...</p></div>`;
@@ -446,8 +512,87 @@ function openModal(movie) {
   modal.style.display = "flex";
   document.body.style.overflow = "hidden"; // Prevent background scrolling
 
-  // Load the trailer in the background
+  // Load availability and trailer in the background
+  loadWatchProvidersForModal(movie);
   loadTrailerForModal(movie.id);
+}
+
+function renderOttPlatforms(platforms, isLoading = false) {
+  const modalOtt = document.getElementById("modal-ott");
+  if (!modalOtt) return;
+
+  if (isLoading) {
+    modalOtt.innerHTML = `
+      <h3>Available on</h3>
+      <p class="ott-muted">Checking OTT platforms...</p>
+    `;
+    return;
+  }
+
+  const normalizedPlatforms = normalizePlatforms(platforms);
+
+  if (normalizedPlatforms.length === 0) {
+    modalOtt.innerHTML = `
+      <h3>Available on</h3>
+      <p class="ott-muted">No OTT platform listed right now.</p>
+    `;
+    return;
+  }
+
+  const freePlatforms = normalizedPlatforms.filter(platform => ["free", "ads"].includes(platform.type));
+  const paidPlatforms = normalizedPlatforms.filter(platform => !["free", "ads"].includes(platform.type));
+
+  modalOtt.innerHTML = `
+    ${freePlatforms.length ? `
+      <div class="ott-group">
+        <h3>Watch free legally</h3>
+        <div class="ott-platforms">
+          ${freePlatforms.map(createOttPill).join("")}
+        </div>
+      </div>
+    ` : ""}
+    ${paidPlatforms.length ? `
+      <div class="ott-group">
+        <h3>Available on</h3>
+        <div class="ott-platforms">
+          ${paidPlatforms.map(createOttPill).join("")}
+        </div>
+      </div>
+    ` : ""}
+  `;
+}
+
+function createOttPill(platform) {
+  const typeLabel = {
+    ads: "Free with ads",
+    free: "Free",
+    subscription: "Subscription",
+    rent: "Rent",
+    buy: "Buy",
+  }[platform.type] || "Watch";
+
+  return `
+    <span class="ott-pill">
+      ${platform.logo ? `<img src="${escapeHTML(platform.logo)}" alt="" loading="lazy" />` : `<span class="ott-fallback">${escapeHTML(platform.name.charAt(0))}</span>`}
+      <span class="ott-pill__text">
+        <span>${escapeHTML(platform.name)}</span>
+        <small>${escapeHTML(typeLabel)}</small>
+      </span>
+    </span>
+  `;
+}
+
+async function loadWatchProvidersForModal(movie) {
+  const existingPlatforms = normalizePlatforms(movie.ott_platforms);
+
+  if (String(movie.id).startsWith("demo")) {
+    renderOttPlatforms(existingPlatforms, false);
+    return;
+  }
+
+  renderOttPlatforms([], true);
+  const platforms = await fetchWatchProviders(movie.id);
+  renderOttPlatforms(platforms, false);
 }
 
 async function loadTrailerForModal(movieId) {
@@ -505,8 +650,8 @@ function setupModal() {
 function attachCardClickEvents() {
   document.querySelectorAll(".movie-card").forEach(card => {
     card.addEventListener("click", () => {
-      // Read all the movie data stored in data-* attributes
-      const movie = {
+      // Prefer the stored movie object so nested provider data stays intact.
+      const movie = state.moviesByCardKey[card.dataset.cardKey] || {
         id:           card.dataset.id,
         title:        card.dataset.title,
         summary:      card.dataset.summary,
@@ -517,6 +662,7 @@ function attachCardClickEvents() {
         genre:        card.dataset.genre,
         mood:         card.dataset.mood ? card.dataset.mood.split(",") : [],
         vote_average: card.dataset.vote,
+        ott_platforms: [],
       };
       openModal(movie);
     });
