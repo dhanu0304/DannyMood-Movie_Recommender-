@@ -90,17 +90,23 @@ function parsePlatforms(value) {
 // FETCHING DATA FROM THE BACKEND
 // ─────────────────────────────────────────────
 
+// Determine backend URL (use localhost for local development, relative for deployed)
+const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://localhost:5000`
+  : '';
+
 /**
  * Generic fetch function — contacts our Flask backend.
  * Returns the parsed JSON, or null if something went wrong.
  */
 async function fetchFromAPI(url) {
+  const fullUrl = BACKEND_URL + url;
   try {
-    const response = await fetch(url);
+    const response = await fetch(fullUrl);
     if (!response.ok) throw new Error("API error: " + response.status);
     return await response.json();
   } catch (error) {
-    console.error("Fetch failed:", url, error);
+    console.error("Fetch failed:", fullUrl, error);
     return null;
   }
 }
@@ -584,29 +590,6 @@ function renderOttPlatforms(platforms, isLoading = false) {
   }
 
   modalOtt.innerHTML = ottHtml + websitesHtml;
-}
-
-  const freePlatforms = normalizedPlatforms.filter(platform => ["free", "ads"].includes(platform.type));
-  const paidPlatforms = normalizedPlatforms.filter(platform => !["free", "ads"].includes(platform.type));
-
-  modalOtt.innerHTML = `
-    ${freePlatforms.length ? `
-      <div class="ott-group">
-        <h3>Watch free legally</h3>
-        <div class="ott-platforms">
-          ${freePlatforms.map(createOttPill).join("")}
-        </div>
-      </div>
-    ` : ""}
-    ${paidPlatforms.length ? `
-      <div class="ott-group">
-        <h3>Available on</h3>
-        <div class="ott-platforms">
-          ${paidPlatforms.map(createOttPill).join("")}
-        </div>
-      </div>
-    ` : ""}
-  `;
 }
 
 function createOttPill(platform) {
