@@ -9,6 +9,12 @@ const state = {
   moviesByCardKey: {},
   explorerPath: "",
   explorerTitle: "",
+  modalReviews: {
+    movieId: "",
+    reviews: [],
+    visibleCount: 3,
+    expanded: new Set(),
+  },
 };
 
 const MOODS = [
@@ -31,6 +37,7 @@ const BACKEND_URL = "";
 const WATCHLIST_KEY = "dannymood-watchlist";
 const RECENT_MOODS_KEY = "dannymood-recent-moods";
 const CURRENT_YEAR = new Date().getFullYear();
+const reviewCache = {};
 
 const GENRES = [
   "Action", "Adventure", "Animation", "Comedy", "Crime", "Drama",
@@ -56,6 +63,17 @@ function escapeHTML(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function formatReviewDate(value) {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function normalizePlatforms(platforms) {
@@ -720,11 +738,13 @@ async function openModal(movie) {
     '<div class="trailer-loading"><div class="spinner"></div><p>Loading trailer...</p></div>';
   document.getElementById("modal-cast").innerHTML = '<p class="ott-muted">Loading cast...</p>';
   document.getElementById("modal-similar").innerHTML = '<p class="ott-muted">Loading recommendations...</p>';
+  document.getElementById("modal-reviews").innerHTML = '<p class="ott-muted">Loading reviews...</p>';
 
   if (String(movie.id).startsWith("demo")) {
     renderOttPlatforms(normalizePlatforms(movie.ott_platforms));
     document.getElementById("modal-cast").innerHTML = '<p class="ott-muted">Cast unavailable for demo movies.</p>';
     document.getElementById("modal-similar").innerHTML = '<p class="ott-muted">Similar movies unavailable for demo movies.</p>';
+    renderReviews([], movie.id);
   } else {
     const mediaType = movie.media_type || "movie";
     await Promise.all([
@@ -733,6 +753,7 @@ async function openModal(movie) {
       loadTrailerForModal(movie.id, mediaType),
       loadCastForModal(movie.id, mediaType),
       loadSimilarForModal(movie.id, mediaType),
+      loadReviewsForModal(movie.id, mediaType),
     ]);
   }
 }
@@ -837,6 +858,92 @@ async function loadSimilarForModal(movieId, mediaType = "movie") {
   document.querySelectorAll(".similar-card").forEach((button, index) => {
     button.addEventListener("click", () => openModal(movies[index]));
   });
+}
+
+async function loadReviewsForModal(movieId, mediaType = "movie") {
+  if (mediaType !== "movie") {
+    renderReviews([], movieId);
+    return;
+  }
+
+  if (reviewCache[movieId]) {
+    renderReviews(reviewCache[movieId], movieId);
+    return;
+  }
+
+  const data = await fetchFromAPI(`/api/movie/${movieId}/reviews`);
+  const reviews = data?.reviews || [];
+  reviewCache[movieId] = reviews;
+  renderReviews(reviews, movieId);
+}
+
+function renderReviews(reviews, movieId, visibleCount = 3, expanded = new Set()) {
+  const container = document.getElementById("modal-reviews");
+  state.modalReviews = { movieId: String(movieId), reviews, visibleCount, expanded };
+
+  if (!reviews.length) {
+    container.innerHTML = '<p class="ott-muted">No reviews available for this movie yet.</p>';
+    return;
+  }
+
+  const visibleReviews = reviews.slice(0, visibleCount);
+  container.innerHTML = `
+    <div class="review-list">
+      ${visibleReviews.map((review, index) => createReviewCard(review, index, expanded.has(index))).join("")}
+    </div>
+    ${visibleCount < reviews.length
+      ? '<button id="show-more-reviews" class="review-action-btn" type="button">Show More Reviews</button>'
+      : ""}
+  `;
+
+  container.querySelectorAll(".review-expand-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.reviewIndex);
+      const nextExpanded = new Set(state.modalReviews.expanded);
+      if (nextExpanded.has(index)) nextExpanded.delete(index);
+      else nextExpanded.add(index);
+      renderReviews(reviews, movieId, visibleCount, nextExpanded);
+    });
+  });
+
+  const showMore = document.getElementById("show-more-reviews");
+  if (showMore) {
+    showMore.addEventListener("click", () => {
+      renderReviews(reviews, movieId, Math.min(visibleCount + 3, reviews.length), expanded);
+    });
+  }
+}
+
+function createReviewCard(review, index, expanded) {
+  const content = review.content || "No review text provided.";
+  const shouldTruncate = content.length > 520;
+  const displayedContent = shouldTruncate && !expanded
+    ? `${content.slice(0, 520).trim()}...`
+    : content;
+  const rating = review.rating || review.rating === 0
+    ? `${review.rating}/10`
+    : "No rating";
+
+  return `
+    <article class="review-card">
+      <div class="review-card__meta">
+        <div>
+          <strong>${escapeHTML(review.author || "Anonymous")}</strong>
+          <span>${escapeHTML(formatReviewDate(review.date))}</span>
+        </div>
+        <span class="review-rating">${escapeHTML(rating)}</span>
+      </div>
+      <p>${escapeHTML(displayedContent)}</p>
+      <div class="review-card__actions">
+        ${shouldTruncate
+          ? `<button class="review-expand-btn" data-review-index="${index}" type="button">${expanded ? "Show Less" : "Read More"}</button>`
+          : ""}
+        ${review.url
+          ? `<a href="${escapeHTML(review.url)}" target="_blank" rel="noopener">Open on TMDB</a>`
+          : ""}
+      </div>
+    </article>
+  `;
 }
 
 function closeModal() {
