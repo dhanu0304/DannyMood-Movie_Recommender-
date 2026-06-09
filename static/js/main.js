@@ -7,6 +7,8 @@ const state = {
   loadingMore: false,
   heroMovie: null,
   moviesByCardKey: {},
+  explorerPath: "",
+  explorerTitle: "",
 };
 
 const MOODS = [
@@ -27,6 +29,25 @@ const RATING_CONFIG = {
 
 const BACKEND_URL = "";
 const WATCHLIST_KEY = "dannymood-watchlist";
+const RECENT_MOODS_KEY = "dannymood-recent-moods";
+const CURRENT_YEAR = new Date().getFullYear();
+
+const GENRES = [
+  "Action", "Adventure", "Animation", "Comedy", "Crime", "Drama",
+  "Fantasy", "Family", "History", "Horror", "Mystery", "Romance",
+  "Sci-Fi", "Thriller", "War", "Western", "Documentary",
+];
+
+const COUNTRIES = [
+  { name: "India", code: "IN", label: "Indian cinema across five major languages" },
+  { name: "USA", code: "US", label: "Hollywood, independent film, and modern classics" },
+  { name: "Korea", code: "KR", label: "Korean thrillers, dramas, and global hits" },
+  { name: "Japan", code: "JP", label: "Anime, drama, action, and Japanese cinema" },
+  { name: "UK", code: "GB", label: "British drama, comedy, crime, and period film" },
+  { name: "France", code: "FR", label: "French auteurs, romance, comedy, and drama" },
+  { name: "Spain", code: "ES", label: "Spanish thrillers, drama, and contemporary film" },
+  { name: "Germany", code: "DE", label: "German drama, history, and modern cinema" },
+];
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -76,6 +97,7 @@ const fetchSearch = (query, page) => fetchFromAPI(
 const fetchByMood = (moods, page) => fetchFromAPI(
   `/api/mood?${moods.map(mood => `mood=${encodeURIComponent(mood)}`).join("&")}&page=${page}`
 );
+const fetchExplorer = (path, page) => fetchFromAPI(pagedPath(path, page));
 
 async function fetchTrailer(movieId) {
   if (String(movieId).startsWith("demo")) return null;
@@ -103,6 +125,23 @@ function isSaved(movieId) {
 
 function updateWatchlistCount() {
   document.getElementById("watchlist-count").textContent = getWatchlist().length;
+}
+
+function getRecentMoods() {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_MOODS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentMoods(moods) {
+  if (!moods.length) return;
+  const key = moods.join("|");
+  const recent = getRecentMoods().filter(item => item.join("|") !== key);
+  recent.unshift([...moods]);
+  localStorage.setItem(RECENT_MOODS_KEY, JSON.stringify(recent.slice(0, 5)));
+  renderRecentMoods();
 }
 
 function toggleWatchlist(movie) {
@@ -216,13 +255,16 @@ function showView(view) {
   document.getElementById("home-view").style.display = view === "home" ? "grid" : "none";
   document.getElementById("search-view").style.display = view === "search" ? "block" : "none";
   document.getElementById("watchlist-view").style.display = view === "watchlist" ? "block" : "none";
+  document.getElementById("explorer-view").style.display = view === "explorer" ? "block" : "none";
+  updateActiveNav(view === "explorer" ? state.explorerTitle.toLowerCase() : view);
+  closeMobileMenu();
 }
 
 function resetHome() {
   state.selectedMoods = [];
   state.searchQuery = "";
   document.getElementById("search-input").value = "";
-  document.querySelectorAll(".mood-chip").forEach(chip => chip.classList.remove("active"));
+  renderMoodState();
   showView("home");
   loadHomepage();
 }
@@ -284,6 +326,8 @@ async function loadMoodMovies(moods, page = 1, append = false) {
     appendMovies(container.querySelector(".movie-row__scroll"), movies);
     updateLoadMore(container);
   } else {
+    saveRecentMoods(moods);
+    renderMoodState();
     container.innerHTML = createMovieRow(
       `${moods.join(" + ")} Movies`,
       movies,
@@ -304,9 +348,48 @@ function renderMoodChips() {
       state.selectedMoods = state.selectedMoods.includes(mood)
         ? state.selectedMoods.filter(selected => selected !== mood)
         : [...state.selectedMoods, mood];
-      chip.classList.toggle("active");
+      renderMoodState();
       if (state.selectedMoods.length) loadMoodMovies(state.selectedMoods);
       else loadHomepage();
+    });
+  });
+  renderMoodState();
+  renderRecentMoods();
+}
+
+function renderMoodState() {
+  document.querySelectorAll(".mood-chip").forEach(chip => {
+    chip.classList.toggle("active", state.selectedMoods.includes(chip.dataset.mood));
+  });
+  const active = document.getElementById("active-moods");
+  active.innerHTML = state.selectedMoods.length
+    ? `<span class="active-moods__label">Your blend</span>${state.selectedMoods
+        .map(mood => `<span class="active-mood-tag">${escapeHTML(mood)}</span>`).join("")}`
+    : "";
+  document.getElementById("clear-moods-btn").hidden = state.selectedMoods.length === 0;
+}
+
+function clearMoods() {
+  state.selectedMoods = [];
+  renderMoodState();
+  loadHomepage();
+}
+
+function renderRecentMoods() {
+  const container = document.getElementById("recent-moods");
+  const recent = getRecentMoods();
+  container.innerHTML = recent.length
+    ? `<span class="recent-moods__label">Recent Moods</span>
+       <div class="recent-moods__list">${recent.map((moods, index) =>
+         `<button class="recent-mood-btn" data-recent-index="${index}" type="button">${escapeHTML(moods.join(" + "))}</button>`
+       ).join("")}</div>`
+    : "";
+  container.querySelectorAll(".recent-mood-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      state.selectedMoods = recent[Number(button.dataset.recentIndex)] || [];
+      renderMoodState();
+      showView("home");
+      loadMoodMovies(state.selectedMoods);
     });
   });
 }
@@ -356,6 +439,7 @@ async function loadMore() {
   }
   const nextPage = state.page + 1;
   if (state.currentView === "search") await runSearch(state.searchQuery, nextPage, true);
+  else if (state.currentView === "explorer") await loadExplorerGrid(state.explorerPath, state.explorerTitle, nextPage, true);
   else if (state.selectedMoods.length) await loadMoodMovies(state.selectedMoods, nextPage, true);
   state.loadingMore = false;
 }
@@ -391,6 +475,241 @@ function openWatchlist() {
   renderWatchlist();
 }
 
+function updateActiveNav(view) {
+  const aliases = { explorer: "browse", "tv series": "tv" };
+  const target = aliases[view] || view;
+  document.querySelectorAll(".nav-link").forEach(link => {
+    link.classList.toggle("active", link.dataset.view === target);
+  });
+}
+
+function closeMobileMenu() {
+  const panel = document.getElementById("nav-panel");
+  const toggle = document.getElementById("menu-toggle");
+  panel.classList.remove("open");
+  toggle.classList.remove("open");
+  toggle.setAttribute("aria-expanded", "false");
+}
+
+function toggleMobileMenu() {
+  const panel = document.getElementById("nav-panel");
+  const toggle = document.getElementById("menu-toggle");
+  const open = panel.classList.toggle("open");
+  toggle.classList.toggle("open", open);
+  toggle.setAttribute("aria-expanded", String(open));
+}
+
+function setExplorerHeader(kicker, title, description) {
+  document.getElementById("explorer-kicker").textContent = kicker;
+  document.getElementById("explorer-title").textContent = title;
+  document.getElementById("explorer-description").textContent = description;
+}
+
+function openExplorer(view) {
+  state.explorerTitle = view;
+  state.moviesByCardKey = {};
+  showView("explorer");
+  updateActiveNav(view);
+  const controls = document.getElementById("explorer-controls");
+  const results = document.getElementById("explorer-results");
+  controls.innerHTML = "";
+  results.innerHTML = "";
+
+  if (view === "genres") renderGenreExplorer();
+  else if (view === "countries") renderCountryExplorer();
+  else if (view === "years") renderYearExplorer();
+  else if (view === "movies") renderMediaExplorer("movie");
+  else if (view === "tv") renderMediaExplorer("tv");
+  else renderBrowseHub();
+}
+
+function renderGenreExplorer() {
+  setExplorerHeader("EXPLORE BY STORY", "Genres", "Move from broad curiosity to the exact kind of film you want tonight.");
+  document.getElementById("explorer-controls").innerHTML =
+    `<div class="discovery-card-grid">${GENRES.map((genre, index) =>
+      `<button class="discovery-card genre-card" data-genre="${escapeHTML(genre)}" type="button">
+        <span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHTML(genre)}</strong>
+      </button>`).join("")}</div>`;
+  document.querySelectorAll(".genre-card").forEach(card => {
+    card.addEventListener("click", () => loadGenreCollections(card.dataset.genre));
+  });
+  loadGenreCollections("Action");
+}
+
+async function loadGenreCollections(genre) {
+  setExplorerHeader("GENRE COLLECTION", genre, `Trending, acclaimed, and newly released ${genre.toLowerCase()} movies.`);
+  document.querySelectorAll(".genre-card").forEach(card => {
+    card.classList.toggle("selected", card.dataset.genre === genre);
+  });
+  const results = document.getElementById("explorer-results");
+  showLoading("explorer-results", `Curating ${genre} movies...`);
+  const base = `/api/discover/genre?genre=${encodeURIComponent(genre)}`;
+  const [trending, topRated, latest] = await Promise.all([
+    fetchFromAPI(`${base}&category=trending&page=1`),
+    fetchFromAPI(`${base}&category=top_rated&page=1`),
+    fetchFromAPI(`${base}&category=latest&page=1`),
+  ]);
+  results.innerHTML =
+    createMovieRow(`Trending in ${genre}`, trending?.movies || [], {
+      endpoint: `${base}&category=trending`, hasMore: trending?.has_more,
+    }) +
+    createMovieRow(`Top Rated in ${genre}`, topRated?.movies || [], {
+      endpoint: `${base}&category=top_rated`, hasMore: topRated?.has_more,
+    }) +
+    createMovieRow(`Latest in ${genre}`, latest?.movies || [], {
+      endpoint: `${base}&category=latest`, hasMore: latest?.has_more,
+    });
+  attachCardEvents(results);
+}
+
+function renderCountryExplorer() {
+  setExplorerHeader("WORLD CINEMA", "Countries", "Explore popular films through the languages and filmmaking cultures that shaped them.");
+  document.getElementById("explorer-controls").innerHTML =
+    `<div class="discovery-card-grid country-grid">${COUNTRIES.map(country =>
+      `<button class="discovery-card country-card" data-country="${escapeHTML(country.name)}" type="button">
+        <span>${escapeHTML(country.code)}</span><strong>${escapeHTML(country.name)}</strong><small>${escapeHTML(country.label)}</small>
+      </button>`).join("")}</div>
+     <div id="country-language-filters" class="filter-strip"></div>`;
+  document.querySelectorAll(".country-card").forEach(card => {
+    card.addEventListener("click", () => selectCountry(card.dataset.country));
+  });
+  selectCountry("India");
+}
+
+function selectCountry(country, language = "") {
+  document.querySelectorAll(".country-card").forEach(card => {
+    card.classList.toggle("selected", card.dataset.country === country);
+  });
+  const filters = document.getElementById("country-language-filters");
+  filters.innerHTML = country === "India"
+    ? ["Hindi", "Tamil", "Telugu", "Malayalam", "Kannada"].map(name =>
+        `<button class="filter-chip ${name === language ? "active" : ""}" data-language="${name}" type="button">${name}</button>`
+      ).join("")
+    : "";
+  filters.querySelectorAll(".filter-chip").forEach(button => {
+    button.addEventListener("click", () => selectCountry(country, button.dataset.language));
+  });
+  const query = `/api/discover/country?country=${encodeURIComponent(country)}${language ? `&language=${encodeURIComponent(language)}` : ""}`;
+  loadExplorerGrid(query, language ? `${language} Movies` : `Popular in ${country}`);
+}
+
+function renderYearExplorer() {
+  setExplorerHeader("TIME CAPSULE", "Years", "Travel through movie history or tune the range to a precise era.");
+  const presets = [
+    ["2020s", 2020, CURRENT_YEAR], ["2010s", 2010, 2019], ["2000s", 2000, 2009],
+    ["1990s", 1990, 1999], ["1980s", 1980, 1989], ["Classics", 1950, 1979],
+  ];
+  document.getElementById("explorer-controls").innerHTML =
+    `<div class="filter-strip year-presets">${presets.map(([label, from, to]) =>
+      `<button class="filter-chip" data-from="${from}" data-to="${to}" type="button">${label}</button>`
+    ).join("")}</div>
+    <div class="year-range">
+      <div class="year-range__values"><strong id="from-year-value">1950</strong><span>to</span><strong id="to-year-value">${CURRENT_YEAR}</strong></div>
+      <label>From <input id="from-year" type="range" min="1950" max="${CURRENT_YEAR}" value="1950"></label>
+      <label>To <input id="to-year" type="range" min="1950" max="${CURRENT_YEAR}" value="${CURRENT_YEAR}"></label>
+      <button id="apply-year-range" class="btn-gold" type="button">Explore Years</button>
+    </div>`;
+  document.querySelectorAll(".year-presets .filter-chip").forEach(button => {
+    button.addEventListener("click", () => applyYearRange(Number(button.dataset.from), Number(button.dataset.to), button));
+  });
+  const fromInput = document.getElementById("from-year");
+  const toInput = document.getElementById("to-year");
+  const syncYears = () => {
+    if (Number(fromInput.value) > Number(toInput.value)) {
+      if (document.activeElement === fromInput) toInput.value = fromInput.value;
+      else fromInput.value = toInput.value;
+    }
+    document.getElementById("from-year-value").textContent = fromInput.value;
+    document.getElementById("to-year-value").textContent = toInput.value;
+  };
+  fromInput.addEventListener("input", syncYears);
+  toInput.addEventListener("input", syncYears);
+  document.getElementById("apply-year-range").addEventListener("click", () =>
+    applyYearRange(Number(fromInput.value), Number(toInput.value))
+  );
+  applyYearRange(2020, CURRENT_YEAR, document.querySelector('.year-presets .filter-chip[data-from="2020"]'));
+}
+
+function applyYearRange(fromYear, toYear, activeButton = null) {
+  document.getElementById("from-year").value = fromYear;
+  document.getElementById("to-year").value = toYear;
+  document.getElementById("from-year-value").textContent = fromYear;
+  document.getElementById("to-year-value").textContent = toYear;
+  document.querySelectorAll(".year-presets .filter-chip").forEach(button => {
+    button.classList.toggle("active", button === activeButton);
+  });
+  loadExplorerGrid(
+    `/api/discover/year?from_year=${fromYear}&to_year=${toYear}`,
+    fromYear === toYear ? `Movies from ${fromYear}` : `Movies from ${fromYear} to ${toYear}`,
+  );
+}
+
+function renderMediaExplorer(mediaType) {
+  const isTv = mediaType === "tv";
+  setExplorerHeader(
+    isTv ? "SERIES LIBRARY" : "MOVIE LIBRARY",
+    isTv ? "TV Series" : "Movies",
+    isTv ? "Popular series from around the world, ready to explore." : "A broad, continuously updated collection of popular movies.",
+  );
+  loadExplorerGrid(`/api/discover/media?type=${mediaType}`, isTv ? "Popular TV Series" : "Popular Movies");
+}
+
+function renderBrowseHub() {
+  setExplorerHeader("DISCOVERY HUB", "Browse", "Choose a path into DannyMood's movie library.");
+  const destinations = [
+    ["genres", "Genres", "Explore by story, tone, and cinematic style"],
+    ["countries", "Countries", "Travel through international cinema"],
+    ["years", "Years", "Browse decades or choose an exact range"],
+    ["movies", "Movies", "See what audiences are watching now"],
+    ["tv", "TV Series", "Discover popular series from TMDB"],
+    ["moods", "Moods", "Build a recommendation from how you feel"],
+  ];
+  document.getElementById("explorer-controls").innerHTML =
+    `<div class="browse-grid">${destinations.map(([view, title, description]) =>
+      `<button class="browse-destination" data-destination="${view}" type="button">
+        <strong>${title}</strong><span>${description}</span><b aria-hidden="true">&rarr;</b>
+      </button>`).join("")}</div>`;
+  document.querySelectorAll(".browse-destination").forEach(button => {
+    button.addEventListener("click", () => navigateTo(button.dataset.destination));
+  });
+}
+
+async function loadExplorerGrid(path, title, page = 1, append = false) {
+  state.explorerPath = path;
+  state.explorerTitle = state.explorerTitle || "browse";
+  state.page = page;
+  const results = document.getElementById("explorer-results");
+  if (!append) {
+    state.moviesByCardKey = {};
+    showLoading("explorer-results", `Loading ${title.toLowerCase()}...`);
+  }
+  const data = await fetchExplorer(path, page);
+  const movies = data?.movies || [];
+  state.hasMore = Boolean(data?.has_more && movies.length);
+  if (append) {
+    appendMovies(results.querySelector(".movie-grid"), movies);
+    updateLoadMore(results);
+  } else {
+    results.innerHTML = `<h2 class="explorer-results-title">${escapeHTML(title)}</h2>` +
+      createMovieGrid(movies) + createLoadMoreButton();
+    attachCardEvents(results);
+  }
+}
+
+function navigateTo(view, updateHash = true) {
+  if (updateHash && window.location.hash !== `#${view}`) {
+    window.location.hash = view;
+    return;
+  }
+  if (view === "home") resetHome();
+  else if (view === "moods") {
+    showView("home");
+    updateActiveNav("moods");
+    document.querySelector(".mood-section").scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (view === "watchlist") openWatchlist();
+  else openExplorer(view);
+}
+
 async function openModal(movie) {
   if (!movie) return;
   fillModal(movie);
@@ -407,12 +726,13 @@ async function openModal(movie) {
     document.getElementById("modal-cast").innerHTML = '<p class="ott-muted">Cast unavailable for demo movies.</p>';
     document.getElementById("modal-similar").innerHTML = '<p class="ott-muted">Similar movies unavailable for demo movies.</p>';
   } else {
+    const mediaType = movie.media_type || "movie";
     await Promise.all([
-      loadMovieDetails(movie),
+      loadMovieDetails(movie, mediaType),
       loadWatchProvidersForModal(movie),
-      loadTrailerForModal(movie.id),
-      loadCastForModal(movie.id),
-      loadSimilarForModal(movie.id),
+      loadTrailerForModal(movie.id, mediaType),
+      loadCastForModal(movie.id, mediaType),
+      loadSimilarForModal(movie.id, mediaType),
     ]);
   }
 }
@@ -435,8 +755,8 @@ function fillModal(movie) {
   renderOttPlatforms(normalizePlatforms(movie.ott_platforms));
 }
 
-async function loadMovieDetails(movie) {
-  const details = await fetchFromAPI(`/api/movie/${movie.id}`);
+async function loadMovieDetails(movie, mediaType = "movie") {
+  const details = await fetchFromAPI(`/api/${mediaType}/${movie.id}`);
   if (!details || document.getElementById("modal-title").textContent !== movie.title) return;
   document.getElementById("modal-bg").src = details.backdrop || details.poster || movie.image;
   document.getElementById("modal-year").textContent = details.year;
@@ -476,19 +796,26 @@ function createOttPill(platform) {
 
 async function loadWatchProvidersForModal(movie) {
   renderOttPlatforms([], true);
+  if (movie.media_type === "tv") {
+    renderOttPlatforms([]);
+    return;
+  }
   renderOttPlatforms(await fetchWatchProviders(movie.id));
 }
 
-async function loadTrailerForModal(movieId) {
-  const key = await fetchTrailer(movieId);
+async function loadTrailerForModal(movieId, mediaType = "movie") {
+  const data = String(movieId).startsWith("demo")
+    ? null
+    : await fetchFromAPI(`/api/${mediaType}/${movieId}/trailer`);
+  const key = data?.trailer_key || null;
   document.getElementById("trailer-area").innerHTML = key
     ? `<iframe src="https://www.youtube.com/embed/${escapeHTML(key)}?autoplay=0&rel=0" title="Movie trailer"
         allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
     : '<p class="no-trailer">No trailer available</p>';
 }
 
-async function loadCastForModal(movieId) {
-  const data = await fetchFromAPI(`/api/movie/${movieId}/credits`);
+async function loadCastForModal(movieId, mediaType = "movie") {
+  const data = await fetchFromAPI(`/api/${mediaType}/${movieId}/credits`);
   const cast = data?.cast || [];
   document.getElementById("modal-cast").innerHTML = cast.length
     ? cast.map(person => `<article class="cast-card">
@@ -498,8 +825,8 @@ async function loadCastForModal(movieId) {
     : '<p class="ott-muted">Cast information unavailable.</p>';
 }
 
-async function loadSimilarForModal(movieId) {
-  const data = await fetchFromAPI(`/api/movie/${movieId}/similar`);
+async function loadSimilarForModal(movieId, mediaType = "movie") {
+  const data = await fetchFromAPI(`/api/${mediaType}/${movieId}/similar`);
   const movies = (data?.movies || []).slice(0, 8);
   document.getElementById("modal-similar").innerHTML = movies.length
     ? movies.map(movie => `<button class="similar-card" data-similar-id="${escapeHTML(movie.id)}">
@@ -533,12 +860,19 @@ document.addEventListener("DOMContentLoaded", () => {
   setupSearch();
   setupModal();
   updateWatchlistCount();
-  document.getElementById("back-btn").addEventListener("click", resetHome);
-  document.getElementById("watchlist-back-btn").addEventListener("click", resetHome);
-  document.getElementById("watchlist-nav-btn").addEventListener("click", openWatchlist);
-  document.getElementById("logo").addEventListener("click", resetHome);
-  document.getElementById("logo").addEventListener("keydown", event => {
-    if (event.key === "Enter" || event.key === " ") resetHome();
+  document.getElementById("back-btn").addEventListener("click", () => navigateTo("home"));
+  document.getElementById("watchlist-back-btn").addEventListener("click", () => navigateTo("home"));
+  document.getElementById("clear-moods-btn").addEventListener("click", clearMoods);
+  document.getElementById("menu-toggle").addEventListener("click", toggleMobileMenu);
+  document.querySelectorAll(".nav-link").forEach(link => {
+    link.addEventListener("click", () => navigateTo(link.dataset.view));
   });
-  loadHomepage();
+  document.getElementById("logo").addEventListener("click", () => navigateTo("home"));
+  document.getElementById("logo").addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") navigateTo("home");
+  });
+  window.addEventListener("hashchange", () => {
+    navigateTo(window.location.hash.slice(1) || "home", false);
+  });
+  navigateTo(window.location.hash.slice(1) || "home", false);
 });

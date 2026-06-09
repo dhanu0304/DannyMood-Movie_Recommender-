@@ -8,12 +8,24 @@ dark, streaming-inspired interface.
 
 ![DannyMood homepage](static/screenshots/home.png)
 
+![DannyMood genre explorer](static/screenshots/genres-desktop.png)
+
+![DannyMood country explorer on mobile](static/screenshots/countries-mobile.png)
+
 ## Features
 
+- Responsive navigation for Home, Moods, Genres, Countries, Years, Movies,
+  TV Series, Browse, and Watchlist
 - Trending, popular, top-rated, and Indian movie collections
 - Multi-select mood recommendations with multi-genre TMDB discovery
+- Recent mood combinations stored in `localStorage`
 - Happy mood using Comedy, Animation, and Adventure
 - Recommendation explanations based on selected moods and matching genres
+- Genre explorer with trending, top-rated, and latest collections
+- Country explorer for India, USA, Korea, Japan, UK, France, Spain, and Germany
+- Hindi, Tamil, Telugu, Malayalam, and Kannada filters for Indian cinema
+- Decade presets and a 1950-to-current-year range explorer
+- Dedicated popular movie and TV series libraries
 - Paginated API routes with append-only Load More controls
 - Five-minute `SimpleCache` response caching
 - Debounced movie search
@@ -80,11 +92,19 @@ filters while paging.
 | `GET /api/indian?page=1` | Popular Hindi-language movies |
 | `GET /api/search?q=arrival&page=1` | Movie search |
 | `GET /api/mood?mood=Happy&mood=Thriller&page=1` | Blended mood recommendations |
+| `GET /api/discover/genre?genre=Drama&category=top_rated&page=1` | Genre collections |
+| `GET /api/discover/country?country=India&language=Tamil&page=1` | Country and language discovery |
+| `GET /api/discover/year?from_year=1990&to_year=1999&page=1` | Year-range discovery |
+| `GET /api/discover/media?type=tv&page=1` | Popular movie or TV browsing |
 | `GET /api/movie/<id>` | Full movie details |
 | `GET /api/movie/<id>/credits` | Top-five cast members |
 | `GET /api/movie/<id>/similar?page=1` | Similar movies |
 | `GET /api/movie/<id>/trailer` | YouTube trailer key |
 | `GET /api/movie/<id>/watch-providers?region=IN` | Regional watch providers |
+| `GET /api/tv/<id>` | Full TV series details |
+| `GET /api/tv/<id>/credits` | Top-five TV cast members |
+| `GET /api/tv/<id>/similar?page=1` | Similar TV series |
+| `GET /api/tv/<id>/trailer` | TV series trailer key |
 
 ## Project Structure
 
@@ -97,13 +117,18 @@ DannyMood/
 `-- static/
     |-- css/style.css
     |-- js/main.js
-    `-- screenshots/home.png
+    `-- screenshots/
+        |-- home.png
+        |-- genres-desktop.png
+        `-- countries-mobile.png
 ```
 
 ## Future Roadmap
 
 - User accounts with cloud-synced watchlists
-- Advanced language, year, provider, and rating filters
+- Provider and rating filters
+- People, cast, crew, and director explorer
+- Custom lists and diary-style viewing history
 - Personalized recommendations based on watchlist history
 - Automated backend and browser test suites
 - Production cache support with Redis
