@@ -20,6 +20,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from flask import Flask, jsonify, render_template, request
+from flask_caching import Cache
 from dotenv import load_dotenv
 
 # Suppress SSL warnings (fix for SSL connection issue on some Windows machines)
@@ -29,6 +30,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 load_dotenv()
 
 app = Flask(__name__)
+app.config["CACHE_TYPE"] = "SimpleCache"
+app.config["CACHE_DEFAULT_TIMEOUT"] = 300
+cache = Cache(app)
 
 # Configure a requests session with retries for flaky TMDB network calls
 TMDB_SESSION = requests.Session()
@@ -78,6 +82,7 @@ MOOD_TO_GENRES = {
     "Thriller":     [53, 27, 80],       # Thriller, Horror, Crime
     "Feel-good":    [35, 10751, 16],    # Comedy, Family, Animation
     "Mind-blowing": [878, 9648, 14],    # Sci-Fi, Mystery, Fantasy
+    "Happy":        [35, 16, 12],       # Comedy, Animation, Adventure
 }
 
 # ─────────────────────────────────────────────
@@ -245,6 +250,8 @@ def get_moods_from_genres(genre_ids):
         moods.append("Feel-good")
     if any(g in genre_ids for g in [878, 9648, 14]):
         moods.append("Mind-blowing")
+    if any(g in genre_ids for g in [35, 16, 12]):
+        moods.append("Happy")
 
     # Default mood if nothing matched
     return moods if moods else ["Feel-good"]
@@ -274,6 +281,9 @@ def transform_movie(movie):
 
     vote = movie.get("vote_average", 0)
 
+    release_date = movie.get("release_date", "")
+    year = release_date[:4] if release_date else "N/A"
+
     return {
         "id": str(movie.get("id", "")),
         "title": movie.get("title", "Untitled"),
@@ -283,8 +293,10 @@ def transform_movie(movie):
         "rating": get_rating_from_score(vote),
         "vote_average": round(vote, 1),
         "mood": get_moods_from_genres(genre_ids),
-        "year": (movie.get("release_date") or "2024")[:4],  # Get just the year
+        "year": year,
+        "release_date": release_date or "N/A",
         "genre": genre_names,
+        "genre_names": [GENRE_MAP[g] for g in genre_ids if g in GENRE_MAP],
         "ott_platforms": [],
     }
 
@@ -335,15 +347,11 @@ def get_watch_providers_for_movie(movie_id, region="IN"):
         return []
 
 
-def fetch_from_tmdb(endpoint, params=None):
-    """
-    Make a request to the TMDB API.
-    Returns a list of transformed movies, or an empty list on error.
-    """
+def fetch_tmdb_json(endpoint, params=None):
+    """Return raw JSON from a TMDB endpoint, or an empty dict on failure."""
     if not TMDB_API_KEY:
-        return []  # No key set, return empty (frontend will show demo data)
+        return {}
 
-    # Build the request URL
     url = f"{TMDB_BASE_URL}{endpoint}"
     all_params = {"api_key": TMDB_API_KEY, "language": "en-US"}
     if params:
@@ -351,21 +359,65 @@ def fetch_from_tmdb(endpoint, params=None):
 
     try:
         response = TMDB_SESSION.get(url, params=all_params, timeout=8)
-        response.raise_for_status()  # Raise error if status is 4xx or 5xx
-        data = response.json()
-        movies = data.get("results", [])
-
-        # Only include movies that have a poster image
-        movies_with_posters = [m for m in movies if m.get("poster_path")]
-
-        return [transform_movie(m) for m in movies_with_posters]
-
+        response.raise_for_status()
+        return response.json()
     except requests.exceptions.Timeout:
         print("TMDB API request timed out")
-        return []
     except requests.exceptions.RequestException as e:
         print(f"TMDB API error: {e}")
-        return []
+    return {}
+
+
+def fetch_from_tmdb(endpoint, params=None, require_poster=True):
+    """
+    Make a request to the TMDB API.
+    Returns a list of transformed movies, or an empty list on error.
+    """
+    data = fetch_tmdb_json(endpoint, params)
+    movies = data.get("results", [])
+    if require_poster:
+        movies = [movie for movie in movies if movie.get("poster_path")]
+    return [transform_movie(movie) for movie in movies]
+
+
+def get_page():
+    """Read a positive TMDB page number from the current request."""
+    return max(request.args.get("page", 1, type=int), 1)
+
+
+def movie_response(movies, page, source="tmdb"):
+    """Build the shared paginated response used by movie collection routes."""
+    return jsonify({
+        "movies": movies,
+        "page": page,
+        "has_more": source == "tmdb" and len(movies) > 0 and page < 500,
+        "source": source,
+    })
+
+
+def add_recommendation_explanations(movies, moods):
+    """Explain each mood recommendation using selected moods and matching genres."""
+    selected = " and ".join(moods)
+    selected_genres = {
+        GENRE_MAP[genre_id]
+        for mood in moods
+        for genre_id in MOOD_TO_GENRES[mood]
+        if genre_id in GENRE_MAP
+    }
+
+    for movie in movies:
+        matching = [
+            genre for genre in movie.get("genre_names", [])
+            if genre in selected_genres
+        ]
+        if movie.get("vote_average", 0) >= 7 and matching:
+            movie["explanation"] = (
+                f"Recommended because you selected {selected} and this movie "
+                f"is highly rated in {' and '.join(matching[:2])}."
+            )
+        else:
+            movie["explanation"] = f"Recommended because you selected {selected}."
+    return movies
 
 
 # ─────────────────────────────────────────────
@@ -379,38 +431,44 @@ def index():
 
 
 @app.route("/api/trending")
+@cache.cached(timeout=300, query_string=True)
 def get_trending():
     """
     Return trending movies from TMDB.
     Falls back to popular or demo data if the trending endpoint is unavailable.
     """
-    movies = fetch_from_tmdb("/trending/movie/week")
+    page = get_page()
+    movies = fetch_from_tmdb("/trending/movie/week", {"page": page})
 
     if not movies:
         # If trending fails, fall back to popular movies so the hero section still shows live data.
-        movies = fetch_from_tmdb("/movie/popular")
+        movies = fetch_from_tmdb("/movie/popular", {"page": page})
 
     if not movies:
-        return jsonify({"movies": DEMO_MOVIES, "source": "demo"})
+        return movie_response(DEMO_MOVIES if page == 1 else [], page, "demo")
 
-    return jsonify({"movies": movies, "source": "tmdb"})
+    return movie_response(movies, page)
 
 
 @app.route("/api/popular")
+@cache.cached(timeout=300, query_string=True)
 def get_popular():
     """Return currently popular movies."""
-    movies = fetch_from_tmdb("/movie/popular")
+    page = get_page()
+    movies = fetch_from_tmdb("/movie/popular", {"page": page})
 
     if not movies:
-        return jsonify({"movies": DEMO_MOVIES, "source": "demo"})
+        return movie_response(DEMO_MOVIES if page == 1 else [], page, "demo")
 
-    return jsonify({"movies": movies, "source": "tmdb"})
+    return movie_response(movies, page)
 
 
 @app.route("/api/top-rated")
+@cache.cached(timeout=300, query_string=True)
 def get_top_rated():
     """Return top-rated movies (great for 'Top Picks' section)."""
-    movies = fetch_from_tmdb("/movie/top_rated")
+    page = get_page()
+    movies = fetch_from_tmdb("/movie/top_rated", {"page": page})
 
     if not movies:
         # If the top-rated endpoint is flaky, use discover sorted by vote average as a stronger fallback.
@@ -419,23 +477,26 @@ def get_top_rated():
             params={
                 "sort_by": "vote_average.desc",
                 "vote_count.gte": 500,
+                "page": page,
             }
         )
 
     if not movies:
         # Filter demo movies to only show top-rated ones
         top = [m for m in DEMO_MOVIES if m["rating"] == "perfection"]
-        return jsonify({"movies": top, "source": "demo"})
+        return movie_response(top if page == 1 else [], page, "demo")
 
-    return jsonify({"movies": movies, "source": "tmdb"})
+    return movie_response(movies, page)
 
 
 @app.route("/api/indian")
+@cache.cached(timeout=300, query_string=True)
 def get_indian_movies():
     """
     Return Indian movies from TMDB using the Hindi original-language filter.
     This keeps the homepage diverse with popular movies from India.
     """
+    page = get_page()
     movies = fetch_from_tmdb(
         "/discover/movie",
         params={
@@ -443,6 +504,7 @@ def get_indian_movies():
             "sort_by": "popularity.desc",
             "vote_count.gte": 50,
             "region": "IN",
+            "page": page,
         }
     )
 
@@ -451,39 +513,31 @@ def get_indian_movies():
             m for m in DEMO_MOVIES
             if m["title"] in {"3 Idiots", "Taare Zameen Par"}
         ]
-        return jsonify({"movies": indian_fallback, "source": "demo"})
+        return movie_response(indian_fallback if page == 1 else [], page, "demo")
 
-    return jsonify({"movies": movies, "source": "tmdb"})
+    return movie_response(movies, page)
 
 
 @app.route("/api/search")
+@cache.cached(timeout=300, query_string=True)
 def search_movies():
     """
     Search for movies by title.
     Usage: /api/search?q=inception
     """
     query = request.args.get("q", "").strip()
+    page = get_page()
 
     if not query:
-        return jsonify({"movies": [], "error": "No search query provided"})
+        return jsonify({"movies": [], "page": page, "has_more": False, "error": "No search query provided"})
 
-    if TMDB_API_KEY:
-        # Try to fetch from TMDB
-        url = f"{TMDB_BASE_URL}/search/movie"
-        all_params = {"api_key": TMDB_API_KEY, "language": "en-US", "query": query}
-
-        try:
-            response = TMDB_SESSION.get(url, params=all_params, timeout=8)
-            response.raise_for_status()
-            data = response.json()
-            movies = data.get("results", [])
-            
-            # For search results, be less strict - include movies without poster_path
-            # since they might still have backdrop or other images
-            if movies:
-                return jsonify({"movies": [transform_movie(m) for m in movies[:20]], "source": "tmdb"})
-        except Exception as e:
-            print(f"Search API error: {e}")
+    movies = fetch_from_tmdb(
+        "/search/movie",
+        {"query": query, "page": page},
+        require_poster=False,
+    )
+    if movies:
+        return movie_response(movies, page)
 
     # Fallback: search through demo data
     query_lower = query.lower()
@@ -493,39 +547,104 @@ def search_movies():
         or query_lower in m["genre"].lower()
         or any(query_lower in mood.lower() for mood in m["mood"])
     ]
-    return jsonify({"movies": results, "source": "demo"})
+    return movie_response(results if page == 1 else [], page, "demo")
 
 
 @app.route("/api/mood")
+@cache.cached(timeout=300, query_string=True)
 def get_movies_by_mood():
     """
     Return movies filtered by mood using TMDB genre filtering.
     Usage: /api/mood?mood=Thriller
     """
-    mood = request.args.get("mood", "").strip()
+    mood_values = request.args.getlist("mood")
+    if len(mood_values) == 1 and "," in mood_values[0]:
+        mood_values = mood_values[0].split(",")
+    moods = list(dict.fromkeys(mood.strip() for mood in mood_values if mood.strip()))
+    page = get_page()
 
-    if not mood or mood not in MOOD_TO_GENRES:
-        return jsonify({"movies": [], "error": "Invalid mood"})
+    if not moods or any(mood not in MOOD_TO_GENRES for mood in moods):
+        return jsonify({"movies": [], "page": page, "has_more": False, "error": "Invalid mood"})
 
-    genre_ids = MOOD_TO_GENRES[mood]
-    # Use the first genre ID to fetch from TMDB
-    primary_genre = genre_ids[0]
+    genre_ids = list(dict.fromkeys(
+        genre_id for mood in moods for genre_id in MOOD_TO_GENRES[mood]
+    ))
+    with_genres = "|".join(str(genre_id) for genre_id in genre_ids)
 
     movies = fetch_from_tmdb(
         "/discover/movie",
         params={
-            "with_genres": primary_genre,
+            "with_genres": with_genres,
             "sort_by": "popularity.desc",
             "vote_count.gte": 100,  # Only show movies with enough votes
+            "page": page,
         }
     )
 
     if not movies:
         # Fallback: filter demo data by mood
-        results = [m for m in DEMO_MOVIES if mood in m["mood"]]
-        return jsonify({"movies": results, "source": "demo"})
+        results = [
+            {**movie, "explanation": f"Recommended because you selected {' and '.join(moods)}."}
+            for movie in DEMO_MOVIES
+            if any(mood in movie["mood"] for mood in moods)
+        ]
+        return movie_response(results if page == 1 else [], page, "demo")
 
-    return jsonify({"movies": movies, "source": "tmdb"})
+    return movie_response(add_recommendation_explanations(movies, moods), page)
+
+
+@app.route("/api/movie/<int:movie_id>")
+@cache.cached(timeout=300)
+def get_movie_details(movie_id):
+    """Return complete details for a movie modal."""
+    movie = fetch_tmdb_json(f"/movie/{movie_id}")
+    if not movie:
+        return jsonify({"error": "Movie details unavailable"}), 404
+
+    genres = [genre.get("name") for genre in movie.get("genres", []) if genre.get("name")]
+    poster_path = movie.get("poster_path")
+    backdrop_path = movie.get("backdrop_path")
+    return jsonify({
+        "id": str(movie.get("id", movie_id)),
+        "title": movie.get("title", "Untitled"),
+        "runtime": movie.get("runtime"),
+        "tagline": movie.get("tagline") or "",
+        "genres": genres,
+        "genre": ", ".join(genres) or "N/A",
+        "overview": movie.get("overview") or "No summary available.",
+        "release_date": movie.get("release_date") or "N/A",
+        "year": movie.get("release_date", "")[:4] or "N/A",
+        "rating": round(movie.get("vote_average", 0), 1),
+        "rating_label": get_rating_from_score(movie.get("vote_average", 0)),
+        "poster": f"{TMDB_IMAGE_BASE}{poster_path}" if poster_path else "",
+        "backdrop": f"{TMDB_IMAGE_ORIGINAL}{backdrop_path}" if backdrop_path else "",
+    })
+
+
+@app.route("/api/movie/<int:movie_id>/similar")
+@cache.cached(timeout=300, query_string=True)
+def get_similar_movies(movie_id):
+    """Return movies similar to a selected title."""
+    page = get_page()
+    movies = fetch_from_tmdb(f"/movie/{movie_id}/similar", {"page": page})
+    return movie_response(movies[:10], page)
+
+
+@app.route("/api/movie/<int:movie_id>/credits")
+@cache.cached(timeout=300)
+def get_movie_credits(movie_id):
+    """Return the top five billed cast members."""
+    data = fetch_tmdb_json(f"/movie/{movie_id}/credits")
+    cast = []
+    for person in data.get("cast", [])[:5]:
+        profile_path = person.get("profile_path")
+        cast.append({
+            "id": person.get("id"),
+            "name": person.get("name", "Unknown"),
+            "character": person.get("character") or "Unknown role",
+            "profile": f"{TMDB_IMAGE_BASE}{profile_path}" if profile_path else "",
+        })
+    return jsonify({"cast": cast})
 
 
 

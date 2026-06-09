@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DannyMood – Movie Recommender</title>
+  <title>DannyMood - Movie Recommender</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -19,7 +19,7 @@
 
       <!-- Search bar -->
       <div class="search-wrap">
-        <span class="search-icon" aria-hidden="true">🔍</span>
+        <span class="search-icon" aria-hidden="true">&#128269;</span>
         <input
           type="search"
           id="search-input"
@@ -28,6 +28,10 @@
           aria-label="Search movies"
         />
       </div>
+
+      <button id="watchlist-nav-btn" class="watchlist-nav-btn" type="button">
+        Watchlist <span id="watchlist-count">0</span>
+      </button>
 
     </div>
   </nav>
@@ -43,7 +47,7 @@
       <div class="demo-banner__inner">
         <div>
           <strong>Showing Demo Data</strong>
-          <p>Set your TMDB API key in app.py to see live movies.</p>
+          <p>Set your TMDB API key in .env to see live movies.</p>
         </div>
       </div>
     </div>
@@ -73,10 +77,10 @@
 
             <div class="hero__buttons">
               <button class="btn-gold" id="hero-explore-btn">
-                ▶ Explore
+                &#9654; Explore
               </button>
               <button class="btn-ghost" onclick="document.getElementById('mood-chips').scrollIntoView({behavior:'smooth'})">
-                ✨ Browse Moods
+                &#10024; Browse Moods
               </button>
             </div>
           </div>
@@ -87,6 +91,7 @@
       <!-- MOOD SELECTOR: Pick a mood to filter movies -->
       <section class="mood-section" aria-label="Filter by mood">
         <h2 class="section-title">How are you feeling?</h2>
+        <p class="mood-section__hint">Choose one mood or blend a few together.</p>
         <!-- Mood chips are rendered here by main.js -->
         <div id="mood-chips" role="group" aria-label="Mood filters"></div>
       </section>
@@ -107,7 +112,7 @@
       <div class="search-view__header">
         <!-- Back button: returns to the homepage -->
         <button id="back-btn" aria-label="Back to home">
-          ← Back to Home
+          &larr; Back to Home
         </button>
         <h2 id="search-title"></h2>
       </div>
@@ -116,6 +121,16 @@
       <div id="search-results"></div>
 
     </div><!-- end #search-view -->
+
+    <div id="watchlist-view" aria-live="polite">
+      <div class="search-view__header">
+        <button id="watchlist-back-btn" class="back-btn" aria-label="Back to home">
+          &larr; Back to Home
+        </button>
+        <h2>My Watchlist</h2>
+      </div>
+      <div id="watchlist-results"></div>
+    </div>
 
   </main>
 
@@ -139,7 +154,7 @@
       </div>
 
       <!-- Close (X) button -->
-      <button id="modal-close-btn" aria-label="Close modal">✕</button>
+      <button id="modal-close-btn" aria-label="Close modal">&times;</button>
 
       <!-- Modal body: movie info + trailer -->
       <div class="modal__body">
@@ -156,7 +171,9 @@
         <h2 id="modal-title"></h2>
 
         <!-- Summary / overview -->
+        <p id="modal-tagline"></p>
         <p id="modal-summary"></p>
+        <div id="modal-runtime"></div>
 
         <!-- Mood tags -->
         <div id="modal-mood" aria-label="Movie moods"></div>
@@ -166,6 +183,16 @@
 
         <!-- YouTube trailer embed -->
         <div id="trailer-area" aria-label="Movie trailer"></div>
+
+        <section class="modal-section" aria-labelledby="cast-heading">
+          <h3 id="cast-heading">Cast</h3>
+          <div id="modal-cast"></div>
+        </section>
+
+        <section class="modal-section" aria-labelledby="similar-heading">
+          <h3 id="similar-heading">More Like This</h3>
+          <div id="modal-similar"></div>
+        </section>
 
       </div><!-- end modal__body -->
 

@@ -1,88 +1,116 @@
-# 🎬 DannyMood — Movie Recommender
+# DannyMood
 
-A beginner-friendly Flask web app that recommends movies based on your mood, 
-powered by the TMDB API. Looks like Netflix. Works like magic.
+DannyMood is a responsive Flask movie discovery app powered by the TMDB API.
+It recommends movies from one mood or a blend of moods and presents them in a
+dark, streaming-inspired interface.
 
----
+## Screenshot
 
-## 📁 Project Structure
+![DannyMood homepage](static/screenshots/home.png)
 
-```
+## Features
+
+- Trending, popular, top-rated, and Indian movie collections
+- Multi-select mood recommendations with multi-genre TMDB discovery
+- Happy mood using Comedy, Animation, and Adventure
+- Recommendation explanations based on selected moods and matching genres
+- Paginated API routes with append-only Load More controls
+- Five-minute `SimpleCache` response caching
+- Debounced movie search
+- Persistent browser watchlist using `localStorage`
+- Detailed movie modal with runtime, tagline, genres, release date, and rating
+- Top-five cast display with character names and profile images
+- More Like This recommendations
+- YouTube trailers and regional TMDB watch-provider availability
+- Demo data fallback when TMDB is unavailable
+- Mobile-responsive cards, navigation, watchlist, and modal content
+
+## Tech Stack
+
+- Python and Flask
+- Flask-Caching with `SimpleCache`
+- TMDB API
+- JavaScript, HTML, and CSS
+- Browser `localStorage`
+
+## Installation
+
+1. Clone the repository and enter the project directory.
+
+2. Create and activate a virtual environment:
+
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. Install dependencies:
+
+   ```powershell
+   pip install -r requirements.txt
+   ```
+
+4. Copy `.env.example` to `.env` and add a TMDB API key:
+
+   ```dotenv
+   TMDB_API_KEY=your_tmdb_api_key_here
+   ```
+
+   API keys are available from
+   [TMDB account settings](https://www.themoviedb.org/settings/api).
+
+5. Start the app:
+
+   ```powershell
+   python app.py
+   ```
+
+6. Open `http://localhost:5000`.
+
+## API Endpoints
+
+Collection endpoints accept `page`, and search/mood endpoints preserve their
+filters while paging.
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/trending?page=1` | Weekly trending movies |
+| `GET /api/popular?page=1` | Popular movies |
+| `GET /api/top-rated?page=1` | Top-rated movies |
+| `GET /api/indian?page=1` | Popular Hindi-language movies |
+| `GET /api/search?q=arrival&page=1` | Movie search |
+| `GET /api/mood?mood=Happy&mood=Thriller&page=1` | Blended mood recommendations |
+| `GET /api/movie/<id>` | Full movie details |
+| `GET /api/movie/<id>/credits` | Top-five cast members |
+| `GET /api/movie/<id>/similar?page=1` | Similar movies |
+| `GET /api/movie/<id>/trailer` | YouTube trailer key |
+| `GET /api/movie/<id>/watch-providers?region=IN` | Regional watch providers |
+
+## Project Structure
+
+```text
 DannyMood/
-├── app.py              ← Flask backend (all Python logic here)
-├── requirements.txt    ← Python packages to install
-├── .env.example        ← Copy this to .env and add your API key
-├── templates/
-│   └── index.html      ← The one HTML page
-└── static/
-    ├── css/
-    │   └── style.css   ← All the styling
-    └── js/
-        └── main.js     ← All the JavaScript
+|-- app.py
+|-- requirements.txt
+|-- templates/
+|   `-- index.html
+`-- static/
+    |-- css/style.css
+    |-- js/main.js
+    `-- screenshots/home.png
 ```
 
----
+## Future Roadmap
 
-## 🚀 How to Run
+- User accounts with cloud-synced watchlists
+- Advanced language, year, provider, and rating filters
+- Personalized recommendations based on watchlist history
+- Automated backend and browser test suites
+- Production cache support with Redis
+- Accessibility audit and keyboard-first card navigation
 
-### Step 1 — Install dependencies
-```bash
-pip install -r requirements.txt
-```
+## Attribution
 
-### Step 2 — Set your TMDB API key
-1. Get a free API key at: https://www.themoviedb.org/settings/api
-2. Copy `.env.example` to `.env`
-3. Replace `your_tmdb_api_key_here` with your actual key
-
-Or just open `app.py` and replace `YOUR_TMDB_API_KEY_HERE` directly.
-
-### Step 3 — Run the app
-```bash
-python app.py
-```
-
-### Step 4 — Open in browser
-Go to: **http://localhost:5000**
-
-> ⚠️ If you don't set an API key, the app will show demo placeholder movies.
-
----
-
-## ✨ Features
-
-| Feature | Description |
-|--------|-------------|
-| 🔥 Trending | Live trending movies from TMDB |
-| 🎬 Popular | Currently popular movies |
-| ⭐ Top Picks | Top-rated movies of all time |
-| 😢 Mood Filter | Filter movies by mood (Sad, Romantic, Thriller...) |
-| 🔍 Search | Search by title with live results |
-| ← Back Button | Returns to homepage after searching |
-| 🎥 Trailers | YouTube trailers in the movie modal |
-| 📱 Responsive | Works on desktop and mobile |
-
----
-
-## 🔌 API Endpoints
-
-| Endpoint | What it does |
-|---------|-------------|
-| `GET /` | Serves the app homepage |
-| `GET /api/trending` | Returns trending movies |
-| `GET /api/popular` | Returns popular movies |
-| `GET /api/top-rated` | Returns top-rated movies |
-| `GET /api/search?q=batman` | Searches for a movie |
-| `GET /api/mood?mood=Thriller` | Returns movies for a mood |
-| `GET /api/movie/123/trailer` | Returns the YouTube trailer key |
-
----
-
-## 🎨 Rating System
-
-| Rating | Score Range | Color |
-|--------|------------|-------|
-| Perfection | 8.0+ | 🟢 Green |
-| Go For It | 6.5–7.9 | 🔵 Blue |
-| Timepass | 5.0–6.4 | 🟡 Yellow |
-| Skip | Below 5.0 | 🔴 Red |
+Movie metadata and images are provided by
+[The Movie Database (TMDB)](https://www.themoviedb.org/). This product uses
+the TMDB API but is not endorsed or certified by TMDB.
