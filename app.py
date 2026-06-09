@@ -811,6 +811,24 @@ def get_movie_credits(movie_id):
     return jsonify({"cast": cast})
 
 
+@app.route("/api/movie/<int:movie_id>/reviews")
+@cache.cached(timeout=300)
+def get_movie_reviews(movie_id):
+    """Return TMDB reviews for the movie details modal."""
+    data = fetch_tmdb_json(f"/movie/{movie_id}/reviews")
+    reviews = []
+    for review in data.get("results", []):
+        author_details = review.get("author_details") or {}
+        reviews.append({
+            "author": review.get("author") or author_details.get("username") or "Anonymous",
+            "rating": author_details.get("rating"),
+            "content": review.get("content") or "",
+            "date": review.get("created_at") or review.get("updated_at") or "",
+            "url": review.get("url") or "",
+        })
+    return jsonify({"reviews": reviews})
+
+
 @app.route("/api/tv/<int:show_id>")
 @cache.cached(timeout=300)
 def get_tv_details(show_id):

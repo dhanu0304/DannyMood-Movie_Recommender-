@@ -100,6 +100,7 @@ filters while paging.
 | `GET /api/movie/<id>/credits` | Top-five cast members |
 | `GET /api/movie/<id>/similar?page=1` | Similar movies |
 | `GET /api/movie/<id>/trailer` | YouTube trailer key |
+| `GET /api/movie/<id>/reviews` | TMDB movie reviews |
 | `GET /api/movie/<id>/watch-providers?region=IN` | Regional watch providers |
 | `GET /api/tv/<id>` | Full TV series details |
 | `GET /api/tv/<id>/credits` | Top-five TV cast members |
