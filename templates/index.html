@@ -14,10 +14,28 @@
   <nav class="navbar" role="navigation" aria-label="Main navigation">
     <div class="navbar__inner">
 
-      <!-- Logo (click to go home) -->
       <span id="logo" role="link" tabindex="0" aria-label="DannyMood home">DannyMood</span>
 
-      <!-- Search bar -->
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <div id="nav-panel" class="nav-panel">
+        <div class="nav-links" role="list">
+          <button class="nav-link active" data-view="home" type="button">Home</button>
+          <button class="nav-link" data-view="moods" type="button">Moods</button>
+          <button class="nav-link" data-view="genres" type="button">Genres</button>
+          <button class="nav-link" data-view="countries" type="button">Countries</button>
+          <button class="nav-link" data-view="years" type="button">Years</button>
+          <button class="nav-link" data-view="movies" type="button">Movies</button>
+          <button class="nav-link" data-view="tv" type="button">TV Series</button>
+          <button class="nav-link" data-view="browse" type="button">Browse</button>
+          <button class="nav-link" data-view="watchlist" type="button">
+            Watchlist <span id="watchlist-count">0</span>
+          </button>
+        </div>
+      </div>
+
       <div class="search-wrap">
         <span class="search-icon" aria-hidden="true">&#128269;</span>
         <input
@@ -28,10 +46,6 @@
           aria-label="Search movies"
         />
       </div>
-
-      <button id="watchlist-nav-btn" class="watchlist-nav-btn" type="button">
-        Watchlist <span id="watchlist-count">0</span>
-      </button>
 
     </div>
   </nav>
@@ -90,10 +104,16 @@
 
       <!-- MOOD SELECTOR: Pick a mood to filter movies -->
       <section class="mood-section" aria-label="Filter by mood">
-        <h2 class="section-title">How are you feeling?</h2>
-        <p class="mood-section__hint">Choose one mood or blend a few together.</p>
-        <!-- Mood chips are rendered here by main.js -->
+        <div class="section-heading">
+          <div>
+            <h2 class="section-title">How are you feeling?</h2>
+            <p class="mood-section__hint">Choose one mood or blend a few together.</p>
+          </div>
+          <button id="clear-moods-btn" class="text-btn" type="button">Clear All</button>
+        </div>
         <div id="mood-chips" role="group" aria-label="Mood filters"></div>
+        <div id="active-moods" class="active-moods" aria-live="polite"></div>
+        <div id="recent-moods" class="recent-moods"></div>
       </section>
 
 
@@ -130,6 +150,16 @@
         <h2>My Watchlist</h2>
       </div>
       <div id="watchlist-results"></div>
+    </div>
+
+    <div id="explorer-view" class="explorer-view" aria-live="polite">
+      <header class="explorer-header">
+        <span id="explorer-kicker">DISCOVER</span>
+        <h1 id="explorer-title">Browse</h1>
+        <p id="explorer-description"></p>
+      </header>
+      <div id="explorer-controls"></div>
+      <div id="explorer-results"></div>
     </div>
 
   </main>

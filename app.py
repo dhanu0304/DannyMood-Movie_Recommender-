@@ -17,6 +17,7 @@ Get a free TMDB API key at: https://www.themoviedb.org/settings/api
 import os
 import urllib3
 import requests
+from datetime import date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from flask import Flask, jsonify, render_template, request
@@ -73,6 +74,31 @@ GENRE_MAP = {
     36: "History", 27: "Horror", 10402: "Music",
     9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
     10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western"
+}
+
+GENRE_NAME_TO_ID = {
+    name.lower(): genre_id
+    for genre_id, name in GENRE_MAP.items()
+    if name != "TV Movie"
+}
+
+COUNTRY_FILTERS = {
+    "india": {"region": "IN", "origin_country": "IN"},
+    "usa": {"region": "US", "origin_country": "US"},
+    "korea": {"region": "KR", "origin_country": "KR", "language": "ko"},
+    "japan": {"region": "JP", "origin_country": "JP", "language": "ja"},
+    "uk": {"region": "GB", "origin_country": "GB"},
+    "france": {"region": "FR", "origin_country": "FR", "language": "fr"},
+    "spain": {"region": "ES", "origin_country": "ES", "language": "es"},
+    "germany": {"region": "DE", "origin_country": "DE", "language": "de"},
+}
+
+INDIAN_LANGUAGE_FILTERS = {
+    "hindi": "hi",
+    "tamil": "ta",
+    "telugu": "te",
+    "malayalam": "ml",
+    "kannada": "kn",
 }
 
 # Mood → list of TMDB genre IDs
@@ -298,7 +324,19 @@ def transform_movie(movie):
         "genre": genre_names,
         "genre_names": [GENRE_MAP[g] for g in genre_ids if g in GENRE_MAP],
         "ott_platforms": [],
+        "media_type": "movie",
     }
+
+
+def transform_tv_show(show):
+    """Convert a raw TMDB TV result into the shared card format."""
+    transformed = transform_movie({
+        **show,
+        "title": show.get("name") or show.get("original_name"),
+        "release_date": show.get("first_air_date", ""),
+    })
+    transformed["media_type"] = "tv"
+    return transformed
 
 
 def get_watch_providers_for_movie(movie_id, region="IN"):
@@ -368,7 +406,7 @@ def fetch_tmdb_json(endpoint, params=None):
     return {}
 
 
-def fetch_from_tmdb(endpoint, params=None, require_poster=True):
+def fetch_from_tmdb(endpoint, params=None, require_poster=True, media_type="movie"):
     """
     Make a request to the TMDB API.
     Returns a list of transformed movies, or an empty list on error.
@@ -377,7 +415,8 @@ def fetch_from_tmdb(endpoint, params=None, require_poster=True):
     movies = data.get("results", [])
     if require_poster:
         movies = [movie for movie in movies if movie.get("poster_path")]
-    return [transform_movie(movie) for movie in movies]
+    transformer = transform_tv_show if media_type == "tv" else transform_movie
+    return [transformer(movie) for movie in movies]
 
 
 def get_page():
@@ -418,6 +457,20 @@ def add_recommendation_explanations(movies, moods):
         else:
             movie["explanation"] = f"Recommended because you selected {selected}."
     return movies
+
+
+def get_discover_sort(category):
+    """Return safe TMDB sorting parameters for explorer collections."""
+    today = date.today().isoformat()
+    if category == "top_rated":
+        return {"sort_by": "vote_average.desc", "vote_count.gte": 200}
+    if category == "latest":
+        return {
+            "sort_by": "primary_release_date.desc",
+            "primary_release_date.lte": today,
+            "vote_count.gte": 5,
+        }
+    return {"sort_by": "popularity.desc", "vote_count.gte": 25}
 
 
 # ─────────────────────────────────────────────
@@ -593,6 +646,117 @@ def get_movies_by_mood():
     return movie_response(add_recommendation_explanations(movies, moods), page)
 
 
+@app.route("/api/discover/genre")
+@cache.cached(timeout=300, query_string=True)
+def discover_by_genre():
+    """Browse trending, top-rated, or latest movies in a genre."""
+    genre = request.args.get("genre", "").strip()
+    category = request.args.get("category", "trending").strip().lower()
+    page = get_page()
+    genre_id = GENRE_NAME_TO_ID.get(genre.lower())
+
+    if not genre_id or category not in {"trending", "top_rated", "latest"}:
+        return jsonify({
+            "movies": [], "page": page, "has_more": False,
+            "error": "Invalid genre or category",
+        }), 400
+
+    params = {
+        "with_genres": genre_id,
+        "page": page,
+        **get_discover_sort(category),
+    }
+    movies = fetch_from_tmdb("/discover/movie", params=params)
+    return movie_response(movies, page)
+
+
+@app.route("/api/discover/country")
+@cache.cached(timeout=300, query_string=True)
+def discover_by_country():
+    """Browse popular movies by production country and optional language."""
+    country = request.args.get("country", "").strip().lower()
+    language_name = request.args.get("language", "").strip().lower()
+    page = get_page()
+    country_filter = COUNTRY_FILTERS.get(country)
+
+    if not country_filter:
+        return jsonify({
+            "movies": [], "page": page, "has_more": False,
+            "error": "Invalid country",
+        }), 400
+
+    language = country_filter.get("language")
+    if country == "india" and language_name:
+        language = INDIAN_LANGUAGE_FILTERS.get(language_name)
+        if not language:
+            return jsonify({
+                "movies": [], "page": page, "has_more": False,
+                "error": "Invalid Indian language",
+            }), 400
+
+    params = {
+        "page": page,
+        "sort_by": "popularity.desc",
+        "vote_count.gte": 15,
+        "region": country_filter["region"],
+        "with_origin_country": country_filter["origin_country"],
+    }
+    if language:
+        params["with_original_language"] = language
+
+    movies = fetch_from_tmdb("/discover/movie", params=params)
+    return movie_response(movies, page)
+
+
+@app.route("/api/discover/year")
+@cache.cached(timeout=300, query_string=True)
+def discover_by_year():
+    """Browse movies released within an inclusive year range."""
+    current_year = date.today().year
+    from_year = request.args.get("from_year", 1950, type=int)
+    to_year = request.args.get("to_year", current_year, type=int)
+    page = get_page()
+
+    if not 1870 <= from_year <= to_year <= current_year:
+        return jsonify({
+            "movies": [], "page": page, "has_more": False,
+            "error": "Invalid year range",
+        }), 400
+
+    movies = fetch_from_tmdb(
+        "/discover/movie",
+        params={
+            "primary_release_date.gte": f"{from_year}-01-01",
+            "primary_release_date.lte": f"{to_year}-12-31",
+            "sort_by": "popularity.desc",
+            "vote_count.gte": 20,
+            "page": page,
+        },
+    )
+    return movie_response(movies, page)
+
+
+@app.route("/api/discover/media")
+@cache.cached(timeout=300, query_string=True)
+def discover_media():
+    """Browse popular movies or TV series through one stable endpoint."""
+    media_type = request.args.get("type", "movie").strip().lower()
+    page = get_page()
+    if media_type not in {"movie", "tv"}:
+        return jsonify({
+            "movies": [], "page": page, "has_more": False,
+            "error": "Invalid media type",
+        }), 400
+
+    endpoint = "/movie/popular" if media_type == "movie" else "/tv/popular"
+    movies = fetch_from_tmdb(
+        endpoint,
+        params={"page": page},
+        media_type=media_type,
+    )
+    return movie_response(movies, page)
+
+
 @app.route("/api/movie/<int:movie_id>")
 @cache.cached(timeout=300)
 def get_movie_details(movie_id):
@@ -645,6 +809,80 @@ def get_movie_credits(movie_id):
             "profile": f"{TMDB_IMAGE_BASE}{profile_path}" if profile_path else "",
         })
     return jsonify({"cast": cast})
+
+
+@app.route("/api/tv/<int:show_id>")
+@cache.cached(timeout=300)
+def get_tv_details(show_id):
+    """Return TV details using the same modal contract as movies."""
+    show = fetch_tmdb_json(f"/tv/{show_id}")
+    if not show:
+        return jsonify({"error": "TV details unavailable"}), 404
+
+    genres = [genre.get("name") for genre in show.get("genres", []) if genre.get("name")]
+    poster_path = show.get("poster_path")
+    backdrop_path = show.get("backdrop_path")
+    runtimes = show.get("episode_run_time") or []
+    return jsonify({
+        "id": str(show.get("id", show_id)),
+        "title": show.get("name", "Untitled"),
+        "runtime": runtimes[0] if runtimes else None,
+        "tagline": show.get("tagline") or "",
+        "genres": genres,
+        "genre": ", ".join(genres) or "N/A",
+        "overview": show.get("overview") or "No summary available.",
+        "release_date": show.get("first_air_date") or "N/A",
+        "year": show.get("first_air_date", "")[:4] or "N/A",
+        "rating": round(show.get("vote_average", 0), 1),
+        "rating_label": get_rating_from_score(show.get("vote_average", 0)),
+        "poster": f"{TMDB_IMAGE_BASE}{poster_path}" if poster_path else "",
+        "backdrop": f"{TMDB_IMAGE_ORIGINAL}{backdrop_path}" if backdrop_path else "",
+    })
+
+
+@app.route("/api/tv/<int:show_id>/similar")
+@cache.cached(timeout=300, query_string=True)
+def get_similar_tv(show_id):
+    """Return similar TV series."""
+    page = get_page()
+    shows = fetch_from_tmdb(
+        f"/tv/{show_id}/similar",
+        {"page": page},
+        media_type="tv",
+    )
+    return movie_response(shows[:10], page)
+
+
+@app.route("/api/tv/<int:show_id>/credits")
+@cache.cached(timeout=300)
+def get_tv_credits(show_id):
+    """Return the top five billed TV cast members."""
+    data = fetch_tmdb_json(f"/tv/{show_id}/credits")
+    cast = []
+    for person in data.get("cast", [])[:5]:
+        profile_path = person.get("profile_path")
+        cast.append({
+            "id": person.get("id"),
+            "name": person.get("name", "Unknown"),
+            "character": person.get("character") or "Unknown role",
+            "profile": f"{TMDB_IMAGE_BASE}{profile_path}" if profile_path else "",
+        })
+    return jsonify({"cast": cast})
+
+
+@app.route("/api/tv/<int:show_id>/trailer")
+@cache.cached(timeout=300)
+def get_tv_trailer(show_id):
+    """Return the best YouTube trailer available for a TV series."""
+    data = fetch_tmdb_json(f"/tv/{show_id}/videos")
+    videos = data.get("results", [])
+    trailer = (
+        next((video for video in videos if video.get("site") == "YouTube" and video.get("type") == "Trailer" and video.get("official")), None)
+        or next((video for video in videos if video.get("site") == "YouTube" and video.get("type") == "Trailer"), None)
+        or next((video for video in videos if video.get("site") == "YouTube" and video.get("type") == "Teaser"), None)
+        or next((video for video in videos if video.get("site") == "YouTube"), None)
+    )
+    return jsonify({"trailer_key": trailer["key"] if trailer else None})
 
 
 
