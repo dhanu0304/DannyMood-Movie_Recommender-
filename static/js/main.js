@@ -35,7 +35,9 @@ const RATING_CONFIG = {
 
 const BACKEND_URL = "";
 const WATCHLIST_KEY = "dannymood-watchlist";
+const HIDDEN_MOVIES_KEY = "dannymood-hidden-movies";
 const RECENT_MOODS_KEY = "dannymood-recent-moods";
+const HIDDEN_MOVIES_SHOW_KEY = "dannymood-show-hidden";
 const CURRENT_YEAR = new Date().getFullYear();
 const reviewCache = {};
 
@@ -137,6 +139,36 @@ function getWatchlist() {
   }
 }
 
+function getHiddenMovies() {
+  try {
+    return JSON.parse(localStorage.getItem(HIDDEN_MOVIES_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function toggleHiddenMovies(movieId) {
+  const hidden = getHiddenMovies();
+  const index = hidden.findIndex(id => String(id) === String(movieId));
+  if (index >= 0) hidden.splice(index, 1);
+  else hidden.push(String(movieId));
+  localStorage.setItem(HIDDEN_MOVIES_KEY, JSON.stringify(hidden));
+}
+
+function isHidden(movieId) {
+  return getHiddenMovies().some(id => String(id) === String(movieId));
+}
+
+function shouldShowHiddenMovies() {
+  return localStorage.getItem(HIDDEN_MOVIES_SHOW_KEY) === "true";
+}
+
+function toggleShowHiddenMovies() {
+  const current = shouldShowHiddenMovies();
+  localStorage.setItem(HIDDEN_MOVIES_SHOW_KEY, String(!current));
+  return !current;
+}
+
 function isSaved(movieId) {
   return getWatchlist().some(movie => String(movie.id) === String(movieId));
 }
@@ -173,6 +205,32 @@ function toggleWatchlist(movie) {
   if (state.currentView === "watchlist") renderWatchlist();
 }
 
+function hideMovie(movie, cardElement = null) {
+  toggleHiddenMovies(movie.id);
+  
+  if (cardElement) {
+    cardElement.classList.add("hiding");
+    setTimeout(() => {
+      cardElement.style.display = "none";
+    }, 300);
+  }
+  
+  if (state.currentView === "watchlist") {
+    renderWatchlist();
+  }
+}
+
+function replaceSurpriseMovie(container) {
+  // Find and remove hidden movies from current results and replace with next available
+  const scrollContainer = container || document.querySelector(".movie-row__scroll") || document.querySelector(".movie-grid");
+  if (scrollContainer) {
+    const cards = scrollContainer.querySelectorAll(".movie-card");
+    cards.forEach(card => {
+      if (card.classList.contains("hiding")) card.remove();
+    });
+  }
+}
+
 function refreshHeartButtons(movieId) {
   const saved = isSaved(movieId);
   document.querySelectorAll(`.heart-btn[data-movie-id="${CSS.escape(String(movieId))}"]`)
@@ -189,13 +247,18 @@ function createMovieCard(movie) {
   const storedMovie = { ...movie, ott_platforms: normalizePlatforms(movie.ott_platforms) };
   state.moviesByCardKey[cardKey] = storedMovie;
   const saved = isSaved(movie.id);
+  const hidden = isHidden(movie.id);
 
   return `
     <article class="movie-card" data-card-key="${escapeHTML(cardKey)}">
       <div class="movie-card__poster">
         <img src="${escapeHTML(movie.image)}" alt="${escapeHTML(movie.title)}" loading="lazy" />
-        <button class="heart-btn ${saved ? "active" : ""}" data-movie-id="${escapeHTML(movie.id)}"
-          aria-label="${saved ? "Remove from watchlist" : "Add to watchlist"}">${saved ? "\u2665" : "\u2661"}</button>
+        <div class="movie-card__buttons">
+          <button class="heart-btn ${saved ? "active" : ""}" data-movie-id="${escapeHTML(movie.id)}"
+            aria-label="${saved ? "Remove from watchlist" : "Add to watchlist"}">${saved ? "\u2665" : "\u2661"}</button>
+          <button class="hide-btn" data-movie-id="${escapeHTML(movie.id)}" data-hidden="${hidden}"
+            aria-label="${hidden ? "Show movie" : "Hide movie"}">👁️‍🗨️</button>
+        </div>
         <div class="movie-card__overlay">
           <span class="rating-badge" style="background-color:${ratingInfo.color}">${ratingInfo.label}</span>
           <p class="movie-card__summary">${escapeHTML(movie.summary)}</p>
@@ -245,6 +308,16 @@ function attachCardEvents(root = document) {
       event.stopPropagation();
       const card = button.closest(".movie-card");
       toggleWatchlist(state.moviesByCardKey[card.dataset.cardKey]);
+    });
+  });
+  root.querySelectorAll(".hide-btn").forEach(button => {
+    if (button.dataset.bound) return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      const card = button.closest(".movie-card");
+      const movie = state.moviesByCardKey[card.dataset.cardKey];
+      hideMovie(movie, card);
     });
   });
   const loadMoreButton = root.querySelector("#load-more-btn");
@@ -482,10 +555,115 @@ function showLoading(containerId, message) {
 function renderWatchlist() {
   state.moviesByCardKey = {};
   const movies = getWatchlist();
-  document.getElementById("watchlist-results").innerHTML = movies.length
-    ? createMovieGrid(movies)
-    : '<p class="no-results">Your watchlist is empty. Tap a heart on any movie to save it.</p>';
+  const showHidden = shouldShowHiddenMovies();
+  const hidden = getHiddenMovies();
+  const filteredMovies = showHidden ? movies : movies.filter(m => !hidden.includes(String(m.id)));
+  
+  // Update stats
+  const stats = document.getElementById("watchlist-stats");
+  stats.innerHTML = `<p class="watchlist-stat">${filteredMovies.length} movie${filteredMovies.length !== 1 ? 's' : ''} in your watchlist${hidden.length ? ` (${hidden.length} hidden)` : ''}</p>`;
+  
+  // Get current sort preference
+  const currentSort = document.querySelector(".watchlist-sort-btn.active")?.dataset.sort || "added";
+  const sortedMovies = sortWatchlist(filteredMovies, currentSort);
+  
+  // Show recently saved section if we have multiple movies
+  const recentSection = document.getElementById("recently-saved-section");
+  if (sortedMovies.length > 0) {
+    const recentMovies = sortedMovies.slice(0, 3);
+    recentSection.innerHTML = `
+      <div class="recently-saved">
+        <h3>Recently Saved</h3>
+        <div class="movie-grid-horizontal">${recentMovies.map(createMovieCard).join("")}</div>
+      </div>
+    `;
+    attachCardEvents(recentSection);
+  } else {
+    recentSection.innerHTML = "";
+  }
+  
+  document.getElementById("watchlist-results").innerHTML = sortedMovies.length
+    ? createMovieGrid(sortedMovies)
+    : `<p class="no-results">${hidden.length && !showHidden ? "All unwatched movies are hidden. Enable \"Show Hidden\" to see them." : "Your watchlist is empty. Tap a heart on any movie to save it."}</p>`;
   attachCardEvents(document.getElementById("watchlist-results"));
+}
+
+function sortWatchlist(movies, sortBy) {
+  const sorted = [...movies];
+  if (sortBy === "rating") {
+    sorted.sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
+  } else if (sortBy === "release") {
+    sorted.sort((a, b) => {
+      const dateA = new Date(a.release_date || "1900-01-01");
+      const dateB = new Date(b.release_date || "1900-01-01");
+      return dateB - dateA;
+    });
+  } else if (sortBy === "alpha") {
+    sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  }
+  // "added" keeps original order (most recently added first)
+  return sorted;
+}
+
+function surpriseMe() {
+  // Get all currently visible movies from any source
+  let allMovies = [];
+  
+  if (state.currentView === "home" && state.selectedMoods.length) {
+    // Get from mood results
+    const rows = document.querySelectorAll(".movie-row__scroll");
+    rows.forEach(row => {
+      row.querySelectorAll(".movie-card").forEach(card => {
+        const movie = state.moviesByCardKey[card.dataset.cardKey];
+        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+      });
+    });
+  } else if (state.currentView === "search") {
+    // Get from search results
+    const grid = document.querySelector(".movie-grid");
+    if (grid) {
+      grid.querySelectorAll(".movie-card").forEach(card => {
+        const movie = state.moviesByCardKey[card.dataset.cardKey];
+        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+      });
+    }
+  } else if (state.currentView === "home") {
+    // Get from home page rows
+    const rows = document.querySelectorAll(".movie-row__scroll");
+    rows.forEach(row => {
+      row.querySelectorAll(".movie-card").forEach(card => {
+        const movie = state.moviesByCardKey[card.dataset.cardKey];
+        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+      });
+    });
+  } else if (state.currentView === "explorer") {
+    // Get from explorer
+    const rows = document.querySelectorAll(".movie-row__scroll, .movie-grid");
+    rows.forEach(row => {
+      row.querySelectorAll(".movie-card").forEach(card => {
+        const movie = state.moviesByCardKey[card.dataset.cardKey];
+        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+      });
+    });
+  }
+  
+  // Remove duplicates
+  const uniqueMovies = Array.from(new Map(allMovies.map(m => [m.id, m])).values());
+  
+  if (uniqueMovies.length === 0) {
+    alert("No movies available for surprise pick. Try browsing some movies first!");
+    return;
+  }
+  
+  // Pick random movie
+  const randomMovie = uniqueMovies[Math.floor(Math.random() * uniqueMovies.length)];
+  
+  // Open modal with animation
+  const modal = document.getElementById("movie-modal");
+  modal.classList.add("surprise-reveal");
+  setTimeout(() => modal.classList.remove("surprise-reveal"), 600);
+  
+  openModal(randomMovie);
 }
 
 function openWatchlist() {
@@ -971,6 +1149,24 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("watchlist-back-btn").addEventListener("click", () => navigateTo("home"));
   document.getElementById("clear-moods-btn").addEventListener("click", clearMoods);
   document.getElementById("menu-toggle").addEventListener("click", toggleMobileMenu);
+  document.getElementById("surprise-me-btn").addEventListener("click", surpriseMe);
+  
+  // Hidden movies toggle (separate button on left)
+  document.getElementById("toggle-hidden-movies").addEventListener("click", () => {
+    toggleShowHiddenMovies();
+    document.getElementById("toggle-hidden-movies").classList.toggle("active");
+    renderWatchlist();
+  });
+  
+  // Watchlist sorting
+  document.querySelectorAll(".watchlist-sort-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      document.querySelectorAll(".watchlist-sort-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderWatchlist();
+    });
+  });
+  
   document.querySelectorAll(".nav-link").forEach(link => {
     link.addEventListener("click", () => navigateTo(link.dataset.view));
   });

@@ -93,6 +93,9 @@
               <button class="btn-gold" id="hero-explore-btn">
                 &#9654; Explore
               </button>
+              <button class="btn-gold" id="surprise-me-btn" title="Get a random movie recommendation">
+                🎲 Surprise Me
+              </button>
               <button class="btn-ghost" onclick="document.getElementById('mood-chips').scrollIntoView({behavior:'smooth'})">
                 &#10024; Browse Moods
               </button>
@@ -144,11 +147,32 @@
 
     <div id="watchlist-view" aria-live="polite">
       <div class="search-view__header">
-        <button id="watchlist-back-btn" class="back-btn" aria-label="Back to home">
-          &larr; Back to Home
-        </button>
+        <div class="watchlist-header-left">
+          <button id="watchlist-back-btn" class="back-btn" aria-label="Back to home">
+            &larr; Back to Home
+          </button>
+          <button id="toggle-hidden-movies" class="watchlist-toggle-hidden" title="Show/hide hidden movies">
+            👁️‍🗨️ Show Hidden
+          </button>
+        </div>
         <h2>My Watchlist</h2>
+        <div class="watchlist-controls">
+          <button class="watchlist-sort-btn active" data-sort="added" title="Sort by recently added">
+            📅 Recently Saved
+          </button>
+          <button class="watchlist-sort-btn" data-sort="rating" title="Sort by rating">
+            ⭐ By Rating
+          </button>
+          <button class="watchlist-sort-btn" data-sort="release" title="Sort by release date">
+            📽️ By Release Date
+          </button>
+          <button class="watchlist-sort-btn" data-sort="alpha" title="Sort alphabetically">
+            🔤 A-Z
+          </button>
+        </div>
       </div>
+      <div id="watchlist-stats" class="watchlist-stats"></div>
+      <div id="recently-saved-section"></div>
       <div id="watchlist-results"></div>
     </div>
 
