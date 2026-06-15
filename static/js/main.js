@@ -35,9 +35,7 @@ const RATING_CONFIG = {
 
 const BACKEND_URL = "";
 const WATCHLIST_KEY = "dannymood-watchlist";
-const HIDDEN_MOVIES_KEY = "dannymood-hidden-movies";
 const RECENT_MOODS_KEY = "dannymood-recent-moods";
-const HIDDEN_MOVIES_SHOW_KEY = "dannymood-show-hidden";
 const CURRENT_YEAR = new Date().getFullYear();
 const reviewCache = {};
 
@@ -111,6 +109,7 @@ const fetchTrending = page => fetchFromAPI(pagedPath("/api/trending", page));
 const fetchPopular = page => fetchFromAPI(pagedPath("/api/popular", page));
 const fetchTopRated = page => fetchFromAPI(pagedPath("/api/top-rated", page));
 const fetchIndianMovies = page => fetchFromAPI(pagedPath("/api/indian", page));
+const fetchHomeCollections = () => fetchFromAPI("/api/home-collections");
 const fetchSearch = (query, page) => fetchFromAPI(
   `/api/search?q=${encodeURIComponent(query)}&page=${page}`
 );
@@ -137,36 +136,6 @@ function getWatchlist() {
   } catch {
     return [];
   }
-}
-
-function getHiddenMovies() {
-  try {
-    return JSON.parse(localStorage.getItem(HIDDEN_MOVIES_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function toggleHiddenMovies(movieId) {
-  const hidden = getHiddenMovies();
-  const index = hidden.findIndex(id => String(id) === String(movieId));
-  if (index >= 0) hidden.splice(index, 1);
-  else hidden.push(String(movieId));
-  localStorage.setItem(HIDDEN_MOVIES_KEY, JSON.stringify(hidden));
-}
-
-function isHidden(movieId) {
-  return getHiddenMovies().some(id => String(id) === String(movieId));
-}
-
-function shouldShowHiddenMovies() {
-  return localStorage.getItem(HIDDEN_MOVIES_SHOW_KEY) === "true";
-}
-
-function toggleShowHiddenMovies() {
-  const current = shouldShowHiddenMovies();
-  localStorage.setItem(HIDDEN_MOVIES_SHOW_KEY, String(!current));
-  return !current;
 }
 
 function isSaved(movieId) {
@@ -205,32 +174,6 @@ function toggleWatchlist(movie) {
   if (state.currentView === "watchlist") renderWatchlist();
 }
 
-function hideMovie(movie, cardElement = null) {
-  toggleHiddenMovies(movie.id);
-  
-  if (cardElement) {
-    cardElement.classList.add("hiding");
-    setTimeout(() => {
-      cardElement.style.display = "none";
-    }, 300);
-  }
-  
-  if (state.currentView === "watchlist") {
-    renderWatchlist();
-  }
-}
-
-function replaceSurpriseMovie(container) {
-  // Find and remove hidden movies from current results and replace with next available
-  const scrollContainer = container || document.querySelector(".movie-row__scroll") || document.querySelector(".movie-grid");
-  if (scrollContainer) {
-    const cards = scrollContainer.querySelectorAll(".movie-card");
-    cards.forEach(card => {
-      if (card.classList.contains("hiding")) card.remove();
-    });
-  }
-}
-
 function refreshHeartButtons(movieId) {
   const saved = isSaved(movieId);
   document.querySelectorAll(`.heart-btn[data-movie-id="${CSS.escape(String(movieId))}"]`)
@@ -241,13 +184,27 @@ function refreshHeartButtons(movieId) {
     });
 }
 
+function buildClientExplanation(movie) {
+  const genres = movie.genre_names?.length
+    ? movie.genre_names
+    : String(movie.genre || "").split(/[,/]/).map(genre => genre.trim()).filter(Boolean);
+  if ((movie.popularity || 0) >= 100 && genres.length) {
+    return `Popular among fans of ${genres.slice(0, 2).join(" and ")}.`;
+  }
+  if ((movie.vote_average || 0) >= 8 && genres.length) {
+    return `Highly rated for its ${genres.slice(0, 2).join(" and ")} storytelling.`;
+  }
+  if (genres.length) return `A ${genres.slice(0, 2).join(" and ")} pick matched to your taste.`;
+  return "Recommended for its audience rating and popularity.";
+}
+
 function createMovieCard(movie) {
   const ratingInfo = RATING_CONFIG[movie.rating] || RATING_CONFIG.timepass;
   const cardKey = `${movie.id}-${Object.keys(state.moviesByCardKey).length}`;
   const storedMovie = { ...movie, ott_platforms: normalizePlatforms(movie.ott_platforms) };
   state.moviesByCardKey[cardKey] = storedMovie;
   const saved = isSaved(movie.id);
-  const hidden = isHidden(movie.id);
+  const explanation = movie.explanation || buildClientExplanation(movie);
 
   return `
     <article class="movie-card" data-card-key="${escapeHTML(cardKey)}">
@@ -256,17 +213,18 @@ function createMovieCard(movie) {
         <div class="movie-card__buttons">
           <button class="heart-btn ${saved ? "active" : ""}" data-movie-id="${escapeHTML(movie.id)}"
             aria-label="${saved ? "Remove from watchlist" : "Add to watchlist"}">${saved ? "\u2665" : "\u2661"}</button>
-          <button class="hide-btn" data-movie-id="${escapeHTML(movie.id)}" data-hidden="${hidden}"
-            aria-label="${hidden ? "Show movie" : "Hide movie"}">👁️‍🗨️</button>
         </div>
         <div class="movie-card__overlay">
           <span class="rating-badge" style="background-color:${ratingInfo.color}">${ratingInfo.label}</span>
           <p class="movie-card__summary">${escapeHTML(movie.summary)}</p>
-          <button class="watch-btn" type="button">&#9654; Explore</button>
+          <div class="movie-card__actions">
+            <button class="trailer-btn" type="button">&#9654; Play Trailer</button>
+            <button class="watch-btn" type="button">Explore Details</button>
+          </div>
         </div>
       </div>
       <h3 class="movie-card__title">${escapeHTML(movie.title)}</h3>
-      ${movie.explanation ? `<p class="recommendation-explanation">${escapeHTML(movie.explanation)}</p>` : ""}
+      <p class="recommendation-explanation">${escapeHTML(explanation)}</p>
     </article>`;
 }
 
@@ -275,6 +233,7 @@ function createMovieRow(title, movies, options = {}) {
   return `
     <div class="movie-row" data-row="${escapeHTML(options.rowId || "")}">
       <h2 class="movie-row__title">${escapeHTML(title)}</h2>
+      ${options.description ? `<p class="movie-row__description">${escapeHTML(options.description)}</p>` : ""}
       <div class="movie-row__scroll">${movies.map(createMovieCard).join("")}</div>
       ${options.endpoint && options.hasMore
         ? `<div class="load-more-wrap"><button class="load-more-btn row-load-more"
@@ -310,14 +269,13 @@ function attachCardEvents(root = document) {
       toggleWatchlist(state.moviesByCardKey[card.dataset.cardKey]);
     });
   });
-  root.querySelectorAll(".hide-btn").forEach(button => {
+  root.querySelectorAll(".trailer-btn").forEach(button => {
     if (button.dataset.bound) return;
     button.dataset.bound = "true";
     button.addEventListener("click", event => {
       event.stopPropagation();
       const card = button.closest(".movie-card");
-      const movie = state.moviesByCardKey[card.dataset.cardKey];
-      hideMovie(movie, card);
+      openModal(state.moviesByCardKey[card.dataset.cardKey], true);
     });
   });
   const loadMoreButton = root.querySelector("#load-more-btn");
@@ -335,6 +293,7 @@ function attachCardEvents(root = document) {
 function renderHero(movie) {
   if (!movie) return;
   state.heroMovie = movie;
+  hideHeroSkeleton();
   document.getElementById("hero-bg").src = movie.backdrop || movie.image;
   document.getElementById("hero-title").textContent = movie.title;
   document.getElementById("hero-summary").textContent = movie.summary;
@@ -364,13 +323,22 @@ async function loadHomepage() {
   state.page = 1;
   state.hasMore = false;
   state.moviesByCardKey = {};
-  showLoading("rows-container", "Loading movies...");
-  const [trendingData, popularData, topRatedData, indianData] = await Promise.all([
+  showHeroSkeleton();
+  showHomepageSkeleton();
+  const [trendingData, popularData, topRatedData, indianData, collectionsData] = await Promise.all([
     fetchTrending(1), fetchPopular(1), fetchTopRated(1), fetchIndianMovies(1),
+    fetchHomeCollections(),
   ]);
   const trending = trendingData?.movies || [];
   if (trending.length) renderHero(trending[0]);
+  else hideHeroSkeleton();
   document.getElementById("demo-banner").style.display = trendingData?.source === "demo" ? "" : "none";
+  const curatedRows = (collectionsData?.collections || [])
+    .map(collection => createMovieRow(collection.title, collection.movies, {
+      rowId: collection.slug,
+      description: collection.description,
+    }))
+    .join("");
   document.getElementById("rows-container").innerHTML =
     createMovieRow("\uD83D\uDD25 Trending Now", trending, {
       endpoint: "/api/trending", hasMore: trendingData?.has_more,
@@ -383,7 +351,8 @@ async function loadHomepage() {
     }) +
     createMovieRow("\u2B50 Top Picks", topRatedData?.movies || [], {
       endpoint: "/api/top-rated", hasMore: topRatedData?.has_more,
-    });
+    }) +
+    curatedRows;
   attachCardEvents();
 }
 
@@ -407,7 +376,7 @@ async function loadMoodMovies(moods, page = 1, append = false) {
   const container = document.getElementById("rows-container");
   if (!append) {
     state.moviesByCardKey = {};
-    showLoading("rows-container", `Loading ${moods.join(" + ")} movies...`);
+    showLoading("rows-container", `Loading ${moods.join(" + ")} movies...`, "row");
   }
   const data = await fetchByMood(moods, page);
   const movies = data?.movies || [];
@@ -504,7 +473,7 @@ async function runSearch(query, page = 1, append = false) {
     state.moviesByCardKey = {};
     showView("search");
     document.getElementById("search-title").textContent = `Results for "${query}"`;
-    showLoading("search-results", "Searching...");
+    showLoading("search-results", "Searching...", "grid");
   }
   const data = await fetchSearch(query, page);
   const movies = data?.movies || [];
@@ -547,44 +516,65 @@ function updateLoadMore(container) {
   attachCardEvents(container);
 }
 
-function showLoading(containerId, message) {
+function createSkeletonCard() {
+  return `
+    <article class="movie-card skeleton-card" aria-hidden="true">
+      <div class="skeleton skeleton-poster"></div>
+      <div class="skeleton skeleton-title"></div>
+      <div class="skeleton skeleton-copy"></div>
+      <div class="skeleton skeleton-copy skeleton-copy--short"></div>
+    </article>`;
+}
+
+function createSkeletonGrid(count = 12) {
+  return `<div class="movie-grid skeleton-grid">${Array.from({ length: count }, createSkeletonCard).join("")}</div>`;
+}
+
+function createSkeletonRow() {
+  return `
+    <div class="movie-row skeleton-row" aria-hidden="true">
+      <div class="skeleton skeleton-heading"></div>
+      <div class="movie-row__scroll">${Array.from({ length: 7 }, createSkeletonCard).join("")}</div>
+    </div>`;
+}
+
+function showHomepageSkeleton() {
+  document.getElementById("rows-container").innerHTML =
+    createSkeletonRow() + createSkeletonRow() + createSkeletonRow();
+}
+
+function showHeroSkeleton() {
+  const hero = document.getElementById("hero-section");
+  hero.classList.add("hero--loading");
+  document.getElementById("hero-title").textContent = "";
+  document.getElementById("hero-summary").textContent = "";
+}
+
+function hideHeroSkeleton() {
+  document.getElementById("hero-section").classList.remove("hero--loading");
+}
+
+function showLoading(containerId, message, layout = "grid") {
+  const skeleton = layout === "row" ? createSkeletonRow() : createSkeletonGrid();
   document.getElementById(containerId).innerHTML =
-    `<div class="loading-state"><div class="spinner"></div><p>${escapeHTML(message)}</p></div>`;
+    `<div class="skeleton-loading" role="status" aria-label="${escapeHTML(message)}">${skeleton}</div>`;
 }
 
 function renderWatchlist() {
   state.moviesByCardKey = {};
   const movies = getWatchlist();
-  const showHidden = shouldShowHiddenMovies();
-  const hidden = getHiddenMovies();
-  const filteredMovies = showHidden ? movies : movies.filter(m => !hidden.includes(String(m.id)));
   
   // Update stats
   const stats = document.getElementById("watchlist-stats");
-  stats.innerHTML = `<p class="watchlist-stat">${filteredMovies.length} movie${filteredMovies.length !== 1 ? 's' : ''} in your watchlist${hidden.length ? ` (${hidden.length} hidden)` : ''}</p>`;
+  stats.innerHTML = `<p class="watchlist-stat">${movies.length} movie${movies.length !== 1 ? 's' : ''} in your watchlist</p>`;
   
   // Get current sort preference
   const currentSort = document.querySelector(".watchlist-sort-btn.active")?.dataset.sort || "added";
-  const sortedMovies = sortWatchlist(filteredMovies, currentSort);
-  
-  // Show recently saved section if we have multiple movies
-  const recentSection = document.getElementById("recently-saved-section");
-  if (sortedMovies.length > 0) {
-    const recentMovies = sortedMovies.slice(0, 3);
-    recentSection.innerHTML = `
-      <div class="recently-saved">
-        <h3>Recently Saved</h3>
-        <div class="movie-grid-horizontal">${recentMovies.map(createMovieCard).join("")}</div>
-      </div>
-    `;
-    attachCardEvents(recentSection);
-  } else {
-    recentSection.innerHTML = "";
-  }
-  
+  const sortedMovies = sortWatchlist(movies, currentSort);
+
   document.getElementById("watchlist-results").innerHTML = sortedMovies.length
     ? createMovieGrid(sortedMovies)
-    : `<p class="no-results">${hidden.length && !showHidden ? "All unwatched movies are hidden. Enable \"Show Hidden\" to see them." : "Your watchlist is empty. Tap a heart on any movie to save it."}</p>`;
+    : `<p class="no-results">Your watchlist is empty. Tap a heart on any movie to save it.</p>`;
   attachCardEvents(document.getElementById("watchlist-results"));
 }
 
@@ -615,7 +605,7 @@ function surpriseMe() {
     rows.forEach(row => {
       row.querySelectorAll(".movie-card").forEach(card => {
         const movie = state.moviesByCardKey[card.dataset.cardKey];
-        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+        if (movie) allMovies.push(movie);
       });
     });
   } else if (state.currentView === "search") {
@@ -624,7 +614,7 @@ function surpriseMe() {
     if (grid) {
       grid.querySelectorAll(".movie-card").forEach(card => {
         const movie = state.moviesByCardKey[card.dataset.cardKey];
-        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+        if (movie) allMovies.push(movie);
       });
     }
   } else if (state.currentView === "home") {
@@ -633,7 +623,7 @@ function surpriseMe() {
     rows.forEach(row => {
       row.querySelectorAll(".movie-card").forEach(card => {
         const movie = state.moviesByCardKey[card.dataset.cardKey];
-        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+        if (movie) allMovies.push(movie);
       });
     });
   } else if (state.currentView === "explorer") {
@@ -642,7 +632,7 @@ function surpriseMe() {
     rows.forEach(row => {
       row.querySelectorAll(".movie-card").forEach(card => {
         const movie = state.moviesByCardKey[card.dataset.cardKey];
-        if (movie && !isHidden(movie.id)) allMovies.push(movie);
+        if (movie) allMovies.push(movie);
       });
     });
   }
@@ -906,7 +896,7 @@ function navigateTo(view, updateHash = true) {
   else openExplorer(view);
 }
 
-async function openModal(movie) {
+async function openModal(movie, focusTrailer = false) {
   if (!movie) return;
   fillModal(movie);
   const modal = document.getElementById("movie-modal");
@@ -920,6 +910,7 @@ async function openModal(movie) {
 
   if (String(movie.id).startsWith("demo")) {
     renderOttPlatforms(normalizePlatforms(movie.ott_platforms));
+    renderTrailerFallback();
     document.getElementById("modal-cast").innerHTML = '<p class="ott-muted">Cast unavailable for demo movies.</p>';
     document.getElementById("modal-similar").innerHTML = '<p class="ott-muted">Similar movies unavailable for demo movies.</p>';
     renderReviews([], movie.id);
@@ -928,11 +919,17 @@ async function openModal(movie) {
     await Promise.all([
       loadMovieDetails(movie, mediaType),
       loadWatchProvidersForModal(movie),
-      loadTrailerForModal(movie.id, mediaType),
+      loadTrailerForModal(movie.id, mediaType, focusTrailer),
       loadCastForModal(movie.id, mediaType),
       loadSimilarForModal(movie.id, mediaType),
       loadReviewsForModal(movie.id, mediaType),
     ]);
+  }
+  if (focusTrailer) {
+    document.getElementById("trailer-area").scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   }
 }
 
@@ -1002,15 +999,29 @@ async function loadWatchProvidersForModal(movie) {
   renderOttPlatforms(await fetchWatchProviders(movie.id));
 }
 
-async function loadTrailerForModal(movieId, mediaType = "movie") {
+function renderTrailerFallback() {
+  document.getElementById("trailer-area").innerHTML = `
+    <div class="no-trailer">
+      <span class="no-trailer__icon" aria-hidden="true">&#9654;</span>
+      <strong>Trailer unavailable</strong>
+      <span>There is no embeddable YouTube trailer for this title yet.</span>
+    </div>`;
+}
+
+async function loadTrailerForModal(movieId, mediaType = "movie", autoplay = false) {
   const data = String(movieId).startsWith("demo")
     ? null
     : await fetchFromAPI(`/api/${mediaType}/${movieId}/trailer`);
   const key = data?.trailer_key || null;
-  document.getElementById("trailer-area").innerHTML = key
-    ? `<iframe src="https://www.youtube.com/embed/${escapeHTML(key)}?autoplay=0&rel=0" title="Movie trailer"
-        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
-    : '<p class="no-trailer">No trailer available</p>';
+  if (!key) {
+    renderTrailerFallback();
+    return;
+  }
+  document.getElementById("trailer-area").innerHTML =
+    `<iframe src="https://www.youtube.com/embed/${escapeHTML(key)}?autoplay=${autoplay ? "1" : "0"}&rel=0"
+      title="Movie trailer"
+      allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowfullscreen></iframe>`;
 }
 
 async function loadCastForModal(movieId, mediaType = "movie") {
@@ -1150,13 +1161,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("clear-moods-btn").addEventListener("click", clearMoods);
   document.getElementById("menu-toggle").addEventListener("click", toggleMobileMenu);
   document.getElementById("surprise-me-btn").addEventListener("click", surpriseMe);
-  
-  // Hidden movies toggle (separate button on left)
-  document.getElementById("toggle-hidden-movies").addEventListener("click", () => {
-    toggleShowHiddenMovies();
-    document.getElementById("toggle-hidden-movies").classList.toggle("active");
-    renderWatchlist();
-  });
   
   // Watchlist sorting
   document.querySelectorAll(".watchlist-sort-btn").forEach(btn => {

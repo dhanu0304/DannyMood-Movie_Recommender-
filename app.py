@@ -17,6 +17,7 @@ Get a free TMDB API key at: https://www.themoviedb.org/settings/api
 import os
 import urllib3
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -110,6 +111,39 @@ MOOD_TO_GENRES = {
     "Mind-blowing": [878, 9648, 14],    # Sci-Fi, Mystery, Fantasy
     "Happy":        [35, 16, 12],       # Comedy, Animation, Adventure
 }
+
+CURATED_COLLECTIONS = [
+    {
+        "slug": "brain-dead-after-exams",
+        "title": "🍿 Brain Dead After Exams",
+        "genres": [35, 16, 10751],
+        "description": "Easygoing comedy and animation for switching your brain off.",
+    },
+    {
+        "slug": "rainy-day-comfort",
+        "title": "🌧 Rainy Day Comfort Watches",
+        "genres": [35, 18, 10749],
+        "description": "Warm comedy, drama, and romance for a slow day indoors.",
+    },
+    {
+        "slug": "existential-crisis",
+        "title": "🧠 Existential Crisis Fuel",
+        "genres": [878, 9648, 18],
+        "description": "Thought-provoking sci-fi, mystery, and drama.",
+    },
+    {
+        "slug": "date-night",
+        "title": "❤️ Date Night Picks",
+        "genres": [10749, 35],
+        "description": "Romance and comedy made for watching together.",
+    },
+    {
+        "slug": "adrenaline-rush",
+        "title": "🔥 Adrenaline Rush",
+        "genres": [28, 12, 53],
+        "description": "High-energy action, adventure, and thrillers.",
+    },
+]
 
 # ─────────────────────────────────────────────
 # FALLBACK DEMO DATA (used only if API fails)
@@ -283,6 +317,52 @@ def get_moods_from_genres(genre_ids):
     return moods if moods else ["Feel-good"]
 
 
+def format_list(values):
+    """Format a short list as natural language."""
+    values = [str(value) for value in values if value]
+    if len(values) < 2:
+        return values[0] if values else ""
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+
+def build_recommendation_explanation(movie, selected_moods=None, collection_title=None):
+    """Build a compact explanation from mood, genre, rating, and popularity signals."""
+    genres = movie.get("genre_names") or [
+        genre.strip() for genre in movie.get("genre", "").replace("/", ",").split(",")
+        if genre.strip()
+    ]
+    vote = float(movie.get("vote_average") or 0)
+    popularity = float(movie.get("popularity") or 0)
+
+    if selected_moods:
+        mood_text = format_list(selected_moods)
+        matching_moods = [
+            mood for mood in selected_moods
+            if mood in movie.get("mood", [])
+        ]
+        if len(selected_moods) > 1 and len(matching_moods) > 1:
+            return f"Matches your {mood_text} mood blend."
+        if vote >= 7.5 and genres:
+            return f"Recommended for your {mood_text} mood and strong {genres[0]} rating."
+        return f"Recommended because you selected {mood_text}."
+
+    if collection_title:
+        collection_name = collection_title.split(" ", 1)[-1]
+        if genres:
+            return f"Selected for {collection_name}: a strong {format_list(genres[:2])} match."
+        return f"Selected for {collection_name}."
+
+    if popularity >= 100 and genres:
+        return f"Popular among fans of {format_list(genres[:2])}."
+    if vote >= 8 and genres:
+        return f"Highly rated for its {format_list(genres[:2])} storytelling."
+    if genres:
+        return f"A {format_list(genres[:2])} pick matched to your taste."
+    return "Recommended for its audience rating and current popularity."
+
+
 def transform_movie(movie):
     """
     Convert a raw TMDB movie dict into our app's movie format.
@@ -310,7 +390,7 @@ def transform_movie(movie):
     release_date = movie.get("release_date", "")
     year = release_date[:4] if release_date else "N/A"
 
-    return {
+    transformed = {
         "id": str(movie.get("id", "")),
         "title": movie.get("title", "Untitled"),
         "image": image_url,
@@ -318,6 +398,7 @@ def transform_movie(movie):
         "summary": movie.get("overview") or "No summary available.",
         "rating": get_rating_from_score(vote),
         "vote_average": round(vote, 1),
+        "popularity": round(float(movie.get("popularity") or 0), 1),
         "mood": get_moods_from_genres(genre_ids),
         "year": year,
         "release_date": release_date or "N/A",
@@ -326,6 +407,8 @@ def transform_movie(movie):
         "ott_platforms": [],
         "media_type": "movie",
     }
+    transformed["explanation"] = build_recommendation_explanation(transformed)
+    return transformed
 
 
 def transform_tv_show(show):
@@ -426,36 +509,26 @@ def get_page():
 
 def movie_response(movies, page, source="tmdb"):
     """Build the shared paginated response used by movie collection routes."""
+    prepared_movies = []
+    for movie in movies:
+        prepared = dict(movie)
+        prepared.setdefault("explanation", build_recommendation_explanation(prepared))
+        prepared_movies.append(prepared)
     return jsonify({
-        "movies": movies,
+        "movies": prepared_movies,
         "page": page,
-        "has_more": source == "tmdb" and len(movies) > 0 and page < 500,
+        "has_more": source == "tmdb" and len(prepared_movies) > 0 and page < 500,
         "source": source,
     })
 
 
 def add_recommendation_explanations(movies, moods):
     """Explain each mood recommendation using selected moods and matching genres."""
-    selected = " and ".join(moods)
-    selected_genres = {
-        GENRE_MAP[genre_id]
-        for mood in moods
-        for genre_id in MOOD_TO_GENRES[mood]
-        if genre_id in GENRE_MAP
-    }
-
     for movie in movies:
-        matching = [
-            genre for genre in movie.get("genre_names", [])
-            if genre in selected_genres
-        ]
-        if movie.get("vote_average", 0) >= 7 and matching:
-            movie["explanation"] = (
-                f"Recommended because you selected {selected} and this movie "
-                f"is highly rated in {' and '.join(matching[:2])}."
-            )
-        else:
-            movie["explanation"] = f"Recommended because you selected {selected}."
+        movie["explanation"] = build_recommendation_explanation(
+            movie,
+            selected_moods=moods,
+        )
     return movies
 
 
@@ -571,6 +644,49 @@ def get_indian_movies():
     return movie_response(movies, page)
 
 
+@app.route("/api/home-collections")
+@cache.cached(timeout=300)
+def get_home_collections():
+    """Return curated homepage collections built from focused genre mixes."""
+    def build_collection(definition):
+        movies = fetch_from_tmdb(
+            "/discover/movie",
+            params={
+                "with_genres": "|".join(str(genre_id) for genre_id in definition["genres"]),
+                "sort_by": "popularity.desc",
+                "vote_count.gte": 100,
+                "page": 1,
+            },
+        )[:12]
+
+        if not movies:
+            movies = [
+                dict(movie) for movie in DEMO_MOVIES
+                if set(movie.get("mood", [])) & {
+                    mood
+                    for genre_id in definition["genres"]
+                    for mood in get_moods_from_genres([genre_id])
+                }
+            ][:8]
+
+        for movie in movies:
+            movie["explanation"] = build_recommendation_explanation(
+                movie,
+                collection_title=definition["title"],
+            )
+
+        return {
+            "slug": definition["slug"],
+            "title": definition["title"],
+            "description": definition["description"],
+            "movies": movies,
+        }
+
+    with ThreadPoolExecutor(max_workers=len(CURATED_COLLECTIONS)) as executor:
+        collections = list(executor.map(build_collection, CURATED_COLLECTIONS))
+    return jsonify({"collections": collections})
+
+
 @app.route("/api/search")
 @cache.cached(timeout=300, query_string=True)
 def search_movies():
@@ -637,7 +753,13 @@ def get_movies_by_mood():
     if not movies:
         # Fallback: filter demo data by mood
         results = [
-            {**movie, "explanation": f"Recommended because you selected {' and '.join(moods)}."}
+            {
+                **movie,
+                "explanation": build_recommendation_explanation(
+                    movie,
+                    selected_moods=moods,
+                ),
+            }
             for movie in DEMO_MOVIES
             if any(mood in movie["mood"] for mood in moods)
         ]
