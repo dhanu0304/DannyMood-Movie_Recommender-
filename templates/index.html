@@ -73,7 +73,7 @@
     <div id="home-view">
 
       <!-- HERO SECTION: Big featured movie banner -->
-      <section class="hero" id="hero-section" aria-label="Featured movie">
+      <section class="hero hero--loading" id="hero-section" aria-label="Featured movie">
 
         <!-- Background image (filled by JavaScript) -->
         <img class="hero__bg" id="hero-bg" src="" alt="Featured movie backdrop" />
@@ -86,7 +86,7 @@
         <div class="hero__content">
           <div class="hero__info">
             <span class="hero__label">FEATURED</span>
-            <h1 id="hero-title">Loading...</h1>
+            <h1 id="hero-title"></h1>
             <p  id="hero-summary"></p>
 
             <div class="hero__buttons">
@@ -147,14 +147,9 @@
 
     <div id="watchlist-view" aria-live="polite">
       <div class="search-view__header">
-        <div class="watchlist-header-left">
-          <button id="watchlist-back-btn" class="back-btn" aria-label="Back to home">
-            &larr; Back to Home
-          </button>
-          <button id="toggle-hidden-movies" class="watchlist-toggle-hidden" title="Show/hide hidden movies">
-            👁️‍🗨️ Show Hidden
-          </button>
-        </div>
+        <button id="watchlist-back-btn" class="back-btn" aria-label="Back to home">
+          &larr; Back to Home
+        </button>
         <h2>My Watchlist</h2>
         <div class="watchlist-controls">
           <button class="watchlist-sort-btn active" data-sort="added" title="Sort by recently added">
@@ -172,7 +167,6 @@
         </div>
       </div>
       <div id="watchlist-stats" class="watchlist-stats"></div>
-      <div id="recently-saved-section"></div>
       <div id="watchlist-results"></div>
     </div>
 
